@@ -1,31 +1,74 @@
 # Project Instructions
 
+## Current phase
+
+This project is currently in product/architecture planning. Do not expand the existing prototype implementation until the core docs under `docs/` are consistent and the user explicitly asks to start implementation.
+
+The existing backend/frontend code is an early scaffold, not the architecture source of truth.
+
 ## Product goal
+
 Build a lightweight, explainable securities client-manager workbench prototype. It is not a brokerage CRM replacement and must never imply connection to CITIC Securities or any real brokerage internal system.
 
+## Product model
+
+- Work Area: work already accepted by the relationship manager.
+- Discovery Area: customers for whom a new actionable reason currently exists.
+- Customer Activity: full interaction/event history from manual or external sources.
+- Current Snapshot: confirmed current customer operating state.
+- Work Item: one currently executable piece of relationship-management work.
+- Change Proposal: AI/rules may propose interpretive field changes; human confirmation applies them.
+
 ## Product principles
+
 - V1 is rule-based, not machine-learning based.
-- Customer relationship stage and daily work priority are separate concepts.
+- Customer relationship stage, follow-up state, and daily work state are separate concepts.
 - Every priority contribution must be explainable in plain Chinese.
+- Priority means work-order priority, not conversion probability or investment value.
+- Recently contacted customers are suppressed only when there is no new actionable reason.
+- Preserve full activity history; never replace it with only extracted fields.
 - Next Best Action is a workflow suggestion, not an investment recommendation.
-- Product/service-specific discussion must remain gated by investor suitability and human confirmation.
+- Product/service-specific discussion remains gated by suitability and human confirmation.
 - Never auto-send financial recommendations or auto-make investment decisions.
 - Use simulated customer data only.
 
-## Technical baseline
-- Frontend: React + TypeScript + Vite.
-- Backend: Python + FastAPI.
-- Data: SQLite via Python sqlite3.
-- Keep core priority logic framework-independent and unit-testable.
+## AI principle
 
-## Demo acceptance
-1. Pinned active customer stays near the top.
-2. Explicit rejection immediately lowers daily priority.
-3. "Consider again" schedules a future follow-up; before due it falls back, at due it returns automatically.
-4. New behavioral signals can raise priority with an explanation.
-5. Recording a follow-up updates timeline, stage, next step, next-contact time, and priority.
+AI understands and summarizes; deterministic rules enforce key constraints; humans make the final decision.
+
+AI must not silently overwrite authority-owned customer facts.
+
+## Planned technical baseline
+
+- Frontend: React + TypeScript + Vite.
+- Server state: TanStack Query.
+- Backend: Python + FastAPI.
+- Models/data access: SQLModel.
+- Data: SQLite with WAL for V1.
+- Tests: pytest plus frontend unit/component tests when implementation begins.
+- Keep rule logic framework-independent and unit-testable.
+
+Do not introduce Redis, Celery, Kafka, vector databases, microservices, or autonomous agent infrastructure without a concrete demonstrated need.
+
+## Source of truth
+
+Read before implementation:
+
+1. `docs/PRODUCT-MODEL.md`
+2. `docs/ARCHITECTURE.md`
+3. `docs/FLOWS.md`
+4. `docs/DATA-MODEL.md`
+5. `docs/IMPLEMENTATION-PLAN.md`
+
+## Git
+
+- main should end each completed task clean.
+- Do not push without explicit user authorization.
+- Do not commit secrets, .env, real customer data, or local DB files.
+- Use small descriptive commits.
 
 ## File placement
+
 Project root: /Users/yu0/Workspace/10-Projects/Securities-Client-Workbench
 Work files: /Users/yu0/Workspace/10-Projects/Securities-Client-Workbench/work
 Project outputs: /Users/yu0/Workspace/10-Projects/Securities-Client-Workbench/outputs
