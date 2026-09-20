@@ -190,6 +190,15 @@ export interface JudgmentItem {
   evidence: JudgmentEvidence[];
 }
 
+export interface ActionBrief {
+  mode: "contact" | "wait" | "prepare" | string;
+  objective: string;
+  questions: string[];
+  completion_criteria: string;
+  opening_line: string;
+  evidence: JudgmentEvidence[];
+}
+
 export interface OperatingJudgment {
   generated_at: string;
   mode: "deterministic" | string;
@@ -197,6 +206,7 @@ export interface OperatingJudgment {
   core_concern: JudgmentItem;
   decision_barrier: JudgmentItem;
   next_confirmation: JudgmentItem;
+  action_brief: ActionBrief;
   communication_approach: JudgmentItem;
   avoid_action: JudgmentItem;
 }

@@ -32,6 +32,10 @@ class OperatingJudgmentTests(unittest.TestCase):
             judgment["core_concern"]["text"],
         )
         self.assertIn("资金用途", judgment["next_confirmation"]["text"])
+        self.assertEqual(judgment["action_brief"]["mode"], "contact")
+        self.assertIn("资金", judgment["action_brief"]["objective"])
+        self.assertGreaterEqual(len(judgment["action_brief"]["questions"]), 3)
+        self.assertIn("流动性", judgment["action_brief"]["completion_criteria"])
         self.assertTrue(judgment["current_state"]["evidence"])
         self.assertTrue(judgment["core_concern"]["evidence"])
 
@@ -40,6 +44,9 @@ class OperatingJudgmentTests(unittest.TestCase):
 
         self.assertIn("等待客户", judgment["current_state"]["text"])
         self.assertIn("先等待客户", judgment["communication_approach"]["text"])
+        self.assertEqual(judgment["action_brief"]["mode"], "wait")
+        self.assertEqual(judgment["action_brief"]["questions"], [])
+        self.assertIn("不重复催促", judgment["action_brief"]["completion_criteria"])
         self.assertIn("避免", judgment["avoid_action"]["text"])
         self.assertIn("重复", judgment["avoid_action"]["text"])
 
@@ -49,6 +56,8 @@ class OperatingJudgmentTests(unittest.TestCase):
         self.assertIn("明确拒绝", judgment["current_state"]["text"])
         self.assertIn("没有主动经营需求", judgment["core_concern"]["text"])
         self.assertIn("产品推介", judgment["avoid_action"]["text"])
+        self.assertEqual(judgment["action_brief"]["mode"], "wait")
+        self.assertIn("冷静期", judgment["action_brief"]["objective"])
         self.assertIn("低打扰", judgment["next_confirmation"]["text"])
         self.assertIn("不主动营销触达", judgment["communication_approach"]["text"])
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api, type JudgmentItem, type SavedAttachment } from "../api";
+import { api, type JudgmentEvidence, type SavedAttachment } from "../api";
 
 interface Props {
   customerId: string;
@@ -46,45 +46,45 @@ function activityAttachments(
   return Array.isArray(value) ? (value as SavedAttachment[]) : [];
 }
 
-function JudgmentBlock({
-  label,
-  item,
-  tone = "default",
-}: {
-  label: string;
-  item: JudgmentItem;
-  tone?: "default" | "attention" | "avoid";
-}) {
-  return (
-    <article className={"judgment-block " + tone}>
-      <span className="judgment-label">{label}</span>
-      <strong>{item.text}</strong>
-      {item.evidence.length > 0 && (
-        <details className="judgment-evidence">
-          <summary>查看判断依据</summary>
-          <div>
-            {item.evidence.map((evidence, index) => (
-              <p key={evidence.source + index}>
-                <span
-                  className={
-                    evidence.kind === "hypothesis"
-                      ? "evidence-source hypothesis"
-                      : "evidence-source"
-                  }
-                >
-                  {evidence.source}
-                  {evidence.kind === "hypothesis" ? " · 待验证" : ""}
-                </span>
-                {evidence.text}
-              </p>
-            ))}
-          </div>
-        </details>
-      )}
-    </article>
-  );
+function mergeEvidence(...groups: JudgmentEvidence[][]): JudgmentEvidence[] {
+  const seen = new Set<string>();
+  const result: JudgmentEvidence[] = [];
+  for (const group of groups) {
+    for (const item of group) {
+      const key = [item.source, item.kind, item.activity_id, item.text].join("|");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(item);
+    }
+  }
+  return result.slice(0, 6);
 }
 
+function EvidenceDetails({ evidence }: { evidence: JudgmentEvidence[] }) {
+  if (evidence.length === 0) return null;
+  return (
+    <details className="action-evidence">
+      <summary>为什么这样判断</summary>
+      <div>
+        {evidence.map((item, index) => (
+          <p key={[item.source, item.activity_id, index].join("-")}>
+            <span
+              className={
+                item.kind === "hypothesis"
+                  ? "evidence-source hypothesis"
+                  : "evidence-source"
+              }
+            >
+              {item.source}
+              {item.kind === "hypothesis" ? " · 待验证" : ""}
+            </span>
+            {item.text}
+          </p>
+        ))}
+      </div>
+    </details>
+  );
+}
 
 function ProfileItem({
   label,
@@ -203,14 +203,7 @@ export default function CustomerDrawer({
 
           {query.data && (
             <>
-              <div className="customer-primary-actions">
-                <button
-                  className="button primary"
-                  disabled={manualWork.isPending}
-                  onClick={() => manualWork.mutate()}
-                >
-                  {manualWork.isPending ? "正在进入记录…" : "记录客户动态"}
-                </button>
+              <div className="customer-primary-actions compact-actions">
                 <button
                   className="button secondary"
                   disabled={pinMutation.isPending}
@@ -222,54 +215,124 @@ export default function CustomerDrawer({
                 </button>
               </div>
 
-              <section className="operating-judgment-card">
-                <div className="operating-judgment-head">
+              <section className="client-action-overview">
+                <div className="client-action-overview-head">
                   <div>
                     <p className="eyebrow">RELATIONSHIP MANAGER VIEW</p>
-                    <h3>客户经营判断</h3>
-                    <p>
-                      先回答“现在怎么理解这个客户、下一次怎么沟通”，再展开看完整档案。
-                      结论来自已确认状态、画像、工作项和最近沟通；待验证假设会单独标记。
-                    </p>
+                    <h3>当前经营摘要</h3>
+                    <p>先看状态和下一步；完整画像、资产与历史记录放在下方展开。</p>
                   </div>
-                  <span className="judgment-mode">即时规则判断</span>
+                  <div className="client-status-strip">
+                    <span>
+                      {stageLabels[query.data.customer.relationship_stage] ??
+                        query.data.customer.relationship_stage}
+                    </span>
+                    <span>
+                      {intentLabels[query.data.customer.intent_level] ??
+                        query.data.customer.intent_level}意向
+                    </span>
+                    <span>最近联系 {formatTime(query.data.customer.last_contact_at)}</span>
+                    <span>下次联系 {formatTime(query.data.customer.next_contact_at)}</span>
+                  </div>
                 </div>
 
-                <div className="judgment-grid">
-                  <JudgmentBlock
-                    label="现在处于什么状态？"
-                    item={query.data.operating_judgment.current_state}
-                  />
-                  <JudgmentBlock
-                    label="当前真正关心什么？"
-                    item={query.data.operating_judgment.core_concern}
-                  />
-                  <JudgmentBlock
-                    label="最大的决策障碍是什么？"
-                    item={query.data.operating_judgment.decision_barrier}
-                    tone="attention"
-                  />
-                  <JudgmentBlock
-                    label="下一次最该确认什么？"
-                    item={query.data.operating_judgment.next_confirmation}
-                    tone="attention"
-                  />
+                <div className="client-action-grid">
+                  <article className="current-situation-card">
+                    <span className="action-section-kicker">① 当前状态</span>
+                    <h3>{query.data.operating_judgment.current_state.text}</h3>
+                    <div className="situation-fact">
+                      <span>现在最关心</span>
+                      <p>{query.data.operating_judgment.core_concern.text}</p>
+                    </div>
+                    <div className="situation-fact">
+                      <span>当前障碍</span>
+                      <p>{query.data.operating_judgment.decision_barrier.text}</p>
+                    </div>
+                    <EvidenceDetails
+                      evidence={mergeEvidence(
+                        query.data.operating_judgment.current_state.evidence,
+                        query.data.operating_judgment.core_concern.evidence,
+                        query.data.operating_judgment.decision_barrier.evidence,
+                      )}
+                    />
+                  </article>
+
+                  <article className="next-action-card">
+                    <div className="next-action-title-row">
+                      <span className="action-section-kicker">② 下一步行动</span>
+                      <span className={"action-mode " + query.data.operating_judgment.action_brief.mode}>
+                        {query.data.operating_judgment.action_brief.mode === "wait"
+                          ? "当前先等待"
+                          : query.data.operating_judgment.action_brief.mode === "prepare"
+                            ? "先准备"
+                            : "可以推进"}
+                      </span>
+                    </div>
+                    <h3>{query.data.operating_judgment.action_brief.objective}</h3>
+
+                    {query.data.operating_judgment.action_brief.questions.length > 0 && (
+                      <div className="action-questions">
+                        <span>这次要问清楚</span>
+                        <ol>
+                          {query.data.operating_judgment.action_brief.questions.map(
+                            (question) => <li key={question}>{question}</li>,
+                          )}
+                        </ol>
+                      </div>
+                    )}
+
+                    <div className="completion-standard">
+                      <span>做到什么算完成</span>
+                      <p>{query.data.operating_judgment.action_brief.completion_criteria}</p>
+                    </div>
+
+                    <div className="next-action-buttons">
+                      <button
+                        className="button primary"
+                        disabled={manualWork.isPending}
+                        onClick={() => manualWork.mutate()}
+                      >
+                        {manualWork.isPending ? "正在进入记录…" : "记录本次进展"}
+                      </button>
+                    </div>
+
+                    <EvidenceDetails
+                      evidence={query.data.operating_judgment.action_brief.evidence}
+                    />
+                  </article>
                 </div>
 
-                <div className="judgment-wide-row">
-                  <JudgmentBlock
-                    label="更合适的沟通方式"
-                    item={query.data.operating_judgment.communication_approach}
+                <article className="communication-plan-card">
+                  <span className="action-section-kicker">③ 下一次怎么沟通</span>
+                  <div className="communication-plan-grid">
+                    <div className="opening-suggestion">
+                      <span>建议开场</span>
+                      <blockquote>
+                        {query.data.operating_judgment.action_brief.opening_line}
+                      </blockquote>
+                    </div>
+                    <div className="communication-guidance">
+                      <div>
+                        <span>沟通方式</span>
+                        <p>{query.data.operating_judgment.communication_approach.text}</p>
+                      </div>
+                      <div className="avoid-guidance">
+                        <span>当前避免</span>
+                        <p>{query.data.operating_judgment.avoid_action.text}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <EvidenceDetails
+                    evidence={mergeEvidence(
+                      query.data.operating_judgment.communication_approach.evidence,
+                      query.data.operating_judgment.avoid_action.evidence,
+                    )}
                   />
-                  <JudgmentBlock
-                    label="当前应该避免什么？"
-                    item={query.data.operating_judgment.avoid_action}
-                    tone="avoid"
-                  />
-                </div>
+                </article>
               </section>
 
-              <section className="profile-card">
+              <details className="profile-card detail-disclosure">
+                <summary>当前经营事实与资产概览</summary>
                 <div className="profile-grid">
                   <div>
                     <span>关系阶段</span>
@@ -339,9 +402,10 @@ export default function CustomerDrawer({
                   <span>客户经理备注</span>
                   <p>{query.data.customer.manager_note || "暂无备注"}</p>
                 </div>
-              </section>
+              </details>
 
-              <section className="panorama-card">
+              <details className="panorama-card detail-disclosure">
+                <summary>客户全景画像</summary>
                 <div className="section-title-row compact-heading">
                   <div>
                     <p className="eyebrow">CLIENT PANORAMA</p>
@@ -477,7 +541,7 @@ export default function CustomerDrawer({
                     ))}
                   </div>
                 )}
-              </section>
+              </details>
 
               <section className="ai-tools-card">
                 <div className="ai-tools-head">
