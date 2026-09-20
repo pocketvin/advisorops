@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, type DiscoveryItem, type WorkItem } from "../api";
 import DeferDialog from "./DeferDialog";
+import WorkLifecycleDialog from "./WorkLifecycleDialog";
 
 interface Props {
   onOpenCustomer: (customerId: string) => void;
@@ -58,11 +59,17 @@ function WorkCard({
   variant,
   onRecord,
   onDetail,
+  onCancel,
+  onComplete,
+  lifecyclePending,
 }: {
   item: WorkItem;
   variant: "action" | "waiting";
   onRecord: () => void;
   onDetail: () => void;
+  onCancel: () => void;
+  onComplete: () => void;
+  lifecyclePending: boolean;
 }) {
   return (
     <article className="work-card">
@@ -109,13 +116,33 @@ function WorkCard({
         </div>
       )}
 
-      <div className="card-actions">
+      <div className="card-actions work-card-actions">
         <button className="button ghost" onClick={onDetail}>
           查看详情
         </button>
-        <button className="button primary compact" onClick={onRecord}>
-          记录进展
-        </button>
+        <div className="work-terminal-actions">
+          <button
+            className="text-button work-cancel-button"
+            onClick={onCancel}
+            disabled={lifecyclePending}
+          >
+            取消跟进
+          </button>
+          <button
+            className="button secondary compact"
+            onClick={onComplete}
+            disabled={lifecyclePending}
+          >
+            结束跟进
+          </button>
+          <button
+            className="button primary compact"
+            onClick={onRecord}
+            disabled={lifecyclePending}
+          >
+            记录进展
+          </button>
+        </div>
       </div>
     </article>
   );
@@ -217,6 +244,10 @@ function DiscoveryCard({
 export default function WorkbenchView({ onOpenCustomer, onRecordWork }: Props) {
   const queryClient = useQueryClient();
   const [deferTarget, setDeferTarget] = useState<{ customerId: string; name: string } | null>(null);
+  const [lifecycleTarget, setLifecycleTarget] = useState<{
+    item: WorkItem;
+    mode: "cancel" | "complete";
+  } | null>(null);
   const workbenchQuery = useQuery({
     queryKey: ["workbench"],
     queryFn: api.workbench,
@@ -234,6 +265,31 @@ export default function WorkbenchView({ onOpenCustomer, onRecordWork }: Props) {
         queryClient.invalidateQueries({ queryKey: ["customer", variables.customerId] }),
       ]);
       setDeferTarget(null);
+    },
+  });
+
+  const lifecycleMutation = useMutation({
+    mutationFn: async ({
+      item,
+      mode,
+    }: {
+      item: WorkItem;
+      mode: "cancel" | "complete";
+    }) => {
+      return mode === "cancel"
+        ? api.cancelWork(item.id)
+        : api.completeWork(item.id);
+    },
+    onSuccess: async (result) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workbench"] }),
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["customer", result.customer.customer_id],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["activities"] }),
+      ]);
+      setLifecycleTarget(null);
     },
   });
 
@@ -339,6 +395,16 @@ export default function WorkbenchView({ onOpenCustomer, onRecordWork }: Props) {
                     variant="action"
                     onDetail={() => onOpenCustomer(item.customer_id)}
                     onRecord={() => onRecordWork(item.id, item.customer_id)}
+                    onCancel={() =>
+                      setLifecycleTarget({ item, mode: "cancel" })
+                    }
+                    onComplete={() =>
+                      setLifecycleTarget({ item, mode: "complete" })
+                    }
+                    lifecyclePending={
+                      lifecycleMutation.isPending &&
+                      lifecycleMutation.variables?.item.id === item.id
+                    }
                   />
                 ))}
               </div>
@@ -357,6 +423,16 @@ export default function WorkbenchView({ onOpenCustomer, onRecordWork }: Props) {
                     variant="waiting"
                     onDetail={() => onOpenCustomer(item.customer_id)}
                     onRecord={() => onRecordWork(item.id, item.customer_id)}
+                    onCancel={() =>
+                      setLifecycleTarget({ item, mode: "cancel" })
+                    }
+                    onComplete={() =>
+                      setLifecycleTarget({ item, mode: "complete" })
+                    }
+                    lifecyclePending={
+                      lifecycleMutation.isPending &&
+                      lifecycleMutation.variables?.item.id === item.id
+                    }
                   />
                 ))}
               </div>
@@ -438,7 +514,27 @@ export default function WorkbenchView({ onOpenCustomer, onRecordWork }: Props) {
         {startMutation.error && (
           <div className="error-banner">{startMutation.error.message}</div>
         )}
+        {lifecycleMutation.error && (
+          <div className="error-banner">{lifecycleMutation.error.message}</div>
+        )}
       </section>
+
+      {lifecycleTarget && (
+        <WorkLifecycleDialog
+          mode={lifecycleTarget.mode}
+          customerName={
+            lifecycleTarget.item.name ?? lifecycleTarget.item.customer_id
+          }
+          pending={lifecycleMutation.isPending}
+          onClose={() => setLifecycleTarget(null)}
+          onConfirm={() =>
+            lifecycleMutation.mutate({
+              item: lifecycleTarget.item,
+              mode: lifecycleTarget.mode,
+            })
+          }
+        />
+      )}
 
       {deferTarget && (
         <DeferDialog

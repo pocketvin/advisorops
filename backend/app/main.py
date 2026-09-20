@@ -249,6 +249,22 @@ def ai_context(customer_id: str, payload: ContextPackRequest):
         raise _http_error(exc)
 
 
+@app.post("/api/work-items/{work_item_id}/cancel")
+def cancel_work(work_item_id: int):
+    try:
+        return service.cancel_work(work_item_id)
+    except Exception as exc:
+        raise _http_error(exc)
+
+
+@app.post("/api/work-items/{work_item_id}/complete")
+def complete_work(work_item_id: int):
+    try:
+        return service.complete_work(work_item_id)
+    except Exception as exc:
+        raise _http_error(exc)
+
+
 @app.post("/api/work-items/{work_item_id}/interactions")
 def record_interaction(work_item_id: int, payload: InteractionRequest):
     try:

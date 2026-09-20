@@ -125,6 +125,12 @@ export interface WorkItem {
   customer_next_step?: string;
 }
 
+export interface WorkLifecycleResult {
+  work_item: WorkItem;
+  customer: Customer;
+  activity_id: number;
+}
+
 export interface Workbench {
   summary: {
     action_required: number;
@@ -214,6 +220,7 @@ export interface OperatingJudgment {
 export interface CustomerDetail {
   customer: Customer;
   active_work_item: WorkItem | null;
+  completed_today: boolean;
   activities: ActivityEvent[];
   field_changes: Array<{
     id: number;
@@ -508,6 +515,16 @@ export const api = {
     request<ContextPack>(`/api/customers/${customerId}/ai-context`, {
       method: "POST",
       body: JSON.stringify({ question }),
+    }),
+
+  cancelWork: (workItemId: number) =>
+    request<WorkLifecycleResult>(`/api/work-items/${workItemId}/cancel`, {
+      method: "POST",
+    }),
+
+  completeWork: (workItemId: number) =>
+    request<WorkLifecycleResult>(`/api/work-items/${workItemId}/complete`, {
+      method: "POST",
     }),
 
   recordInteraction: (workItemId: number, payload: InteractionPayload) =>

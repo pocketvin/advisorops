@@ -9,6 +9,7 @@
 - Removed implicit dependency on a sibling local project for AI configuration.
 - Unified frontend/backend package metadata to 0.6.0.
 - Added explainable customer operating judgment cards with traceable evidence and explicit hypothesis labeling.
+- Added explicit cancel/complete follow-up lifecycle with auditable terminal Activities.
 
 ## 0.5.x — richer client context and lower-friction progress capture
 

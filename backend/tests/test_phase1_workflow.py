@@ -135,6 +135,57 @@ class Phase1WorkflowTests(unittest.TestCase):
         self.assertIn("C002", waiting_ids)
         self.assertEqual(waiting_ids.count("C002"), 1)
 
+    def test_cancel_work_returns_customer_to_discovery_without_changing_snapshot(self):
+        work_item = self.service.start_work("C001")
+        before = self.service.customer_detail("C001")["customer"]
+
+        result = self.service.cancel_work(work_item["id"])
+
+        self.assertEqual(result["work_item"]["status"], "cancelled")
+        after = self.service.customer_detail("C001")
+        self.assertEqual(before, after["customer"])
+        self.assertFalse(after["completed_today"])
+        self.assertIsNone(after["active_work_item"])
+        self.assertIn("C001", self._discovery_ids())
+        self.assertTrue(
+            any(
+                item["activity_type"] == "work_cancelled"
+                and item["action_taken"] == "取消跟进"
+                for item in after["activities"]
+            )
+        )
+
+    def test_complete_work_marks_today_done_without_changing_snapshot(self):
+        work_item = self.service.start_work("C001")
+        before = self.service.customer_detail("C001")["customer"]
+
+        result = self.service.complete_work(work_item["id"])
+
+        self.assertEqual(result["work_item"]["status"], "completed_today")
+        after = self.service.customer_detail("C001")
+        self.assertEqual(before, after["customer"])
+        self.assertTrue(after["completed_today"])
+        self.assertIsNone(after["active_work_item"])
+        self.assertNotIn("C001", self._discovery_ids())
+        self.assertIn("本轮今日已结束", after["operating_judgment"]["current_state"]["text"])
+        self.assertEqual(
+            after["operating_judgment"]["action_brief"]["objective"],
+            "本轮跟进今天已结束",
+        )
+        self.assertTrue(
+            any(
+                item["activity_type"] == "work_completed"
+                and item["action_taken"] == "结束跟进"
+                for item in after["activities"]
+            )
+        )
+
+        completed_ids = [
+            item["customer_id"]
+            for item in self.service.workbench()["work_area"]["completed_today"]
+        ]
+        self.assertIn("C001", completed_ids)
+
     def test_customer_without_actionable_reason_cannot_be_started(self):
         with self.assertRaises(InvalidWorkStateError):
             self.service.start_work("C003")

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, type JudgmentEvidence, type SavedAttachment } from "../api";
+import WorkLifecycleDialog from "./WorkLifecycleDialog";
 
 interface Props {
   customerId: string;
@@ -109,6 +110,9 @@ export default function CustomerDrawer({
   const queryClient = useQueryClient();
   const [contextPreview, setContextPreview] = useState<string | null>(null);
   const [copyState, setCopyState] = useState("复制");
+  const [lifecycleTarget, setLifecycleTarget] = useState<
+    "cancel" | "complete" | null
+  >(null);
   const query = useQuery({
     queryKey: ["customer", customerId],
     queryFn: () => api.customer(customerId),
@@ -133,6 +137,29 @@ export default function CustomerDrawer({
       ]);
       onClose();
       onRecordWork(workItem.id, customerId);
+    },
+  });
+
+  const lifecycleMutation = useMutation({
+    mutationFn: async ({
+      workItemId,
+      mode,
+    }: {
+      workItemId: number;
+      mode: "cancel" | "complete";
+    }) => {
+      return mode === "cancel"
+        ? api.cancelWork(workItemId)
+        : api.completeWork(workItemId);
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workbench"] }),
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
+        queryClient.invalidateQueries({ queryKey: ["customer", customerId] }),
+        queryClient.invalidateQueries({ queryKey: ["activities"] }),
+      ]);
+      setLifecycleTarget(null);
     },
   });
 
@@ -200,6 +227,9 @@ export default function CustomerDrawer({
         <div className="drawer-body">
           {query.isLoading && <p className="muted">正在读取完整经营记录…</p>}
           {query.error && <div className="error-banner">{query.error.message}</div>}
+          {lifecycleMutation.error && (
+            <div className="error-banner">{lifecycleMutation.error.message}</div>
+          )}
 
           {query.data && (
             <>
@@ -287,9 +317,27 @@ export default function CustomerDrawer({
                     </div>
 
                     <div className="next-action-buttons">
+                      {query.data.active_work_item && (
+                        <>
+                          <button
+                            className="text-button work-cancel-button"
+                            disabled={lifecycleMutation.isPending}
+                            onClick={() => setLifecycleTarget("cancel")}
+                          >
+                            取消跟进
+                          </button>
+                          <button
+                            className="button secondary compact"
+                            disabled={lifecycleMutation.isPending}
+                            onClick={() => setLifecycleTarget("complete")}
+                          >
+                            结束跟进
+                          </button>
+                        </>
+                      )}
                       <button
                         className="button primary"
-                        disabled={manualWork.isPending}
+                        disabled={manualWork.isPending || lifecycleMutation.isPending}
                         onClick={() => manualWork.mutate()}
                       >
                         {manualWork.isPending ? "正在进入记录…" : "记录本次进展"}
@@ -749,6 +797,21 @@ export default function CustomerDrawer({
             </>
           )}
         </div>
+
+        {lifecycleTarget && query.data?.active_work_item && (
+          <WorkLifecycleDialog
+            mode={lifecycleTarget}
+            customerName={query.data.customer.name}
+            pending={lifecycleMutation.isPending}
+            onClose={() => setLifecycleTarget(null)}
+            onConfirm={() =>
+              lifecycleMutation.mutate({
+                workItemId: query.data!.active_work_item!.id,
+                mode: lifecycleTarget,
+              })
+            }
+          />
+        )}
 
         {contextPreview && (
           <div className="context-preview-panel">

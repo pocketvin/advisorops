@@ -390,3 +390,34 @@ AI 不能成为记录客户沟通的单点故障。
 流程：选择客户 → 显示客户名单与影响范围 → 显式勾选确认 → 事务删除 Customer → SQLite FK cascade 删除 WorkItem / Activity / Audit / Proposal → 检查附件是否仍被其他 Activity 引用 → 删除无引用本地附件 → 刷新工作台 / 客户列表 / 客户动态。
 
 批量删除是 Demo 管理能力，不代表真实券商生产环境可直接物理删除客户档案；真实环境应由机构的数据保留和审计政策控制。
+
+## 16. 取消跟进与结束跟进
+
+进行中的 WorkItem 支持两个显式终止动作：
+
+### 取消跟进
+
+```text
+active WorkItem
+→ 用户确认取消
+→ WorkItem.status = cancelled
+→ 写入 work_cancelled Activity
+→ Customer Snapshot 不变
+→ 若仍满足 Discovery eligibility，可重新回到发现区
+```
+
+适合误点“开始跟进”或决定暂时不承接这次工作项。
+
+### 结束跟进
+
+```text
+active WorkItem
+→ 用户确认结束
+→ WorkItem.status = completed_today
+→ 写入 work_completed Activity
+→ Customer Snapshot 不变
+→ 当天从 Discovery 抑制
+→ 后续由 next_contact_at / 新信号 / 新业务事实再次触发
+```
+
+“结束跟进”不代表发生了一次新的客户沟通，也不自动修改 Relationship Stage、Intent 或下次联系时间。

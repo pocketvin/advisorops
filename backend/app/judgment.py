@@ -133,6 +133,7 @@ def _current_state(
     customer: Mapping[str, Any],
     active_work: Optional[Mapping[str, Any]],
     activities: Sequence[Mapping[str, Any]],
+    completed_today: bool,
 ) -> JudgmentItem:
     stage = _text(customer.get("relationship_stage")) or "new"
     intent = _text(customer.get("intent_level")) or "unknown"
@@ -148,7 +149,15 @@ def _current_state(
         )
     ]
 
-    if active_work:
+    if completed_today:
+        state += "；本轮今日已结束"
+        evidence.append(
+            JudgmentEvidence(
+                source="今日工作",
+                text="客户经理已结束今天这一轮跟进，今天无需重复处理。",
+            )
+        )
+    elif active_work:
         status = _text(active_work.get("status"))
         waiting_on = _text(active_work.get("waiting_on"))
         if status == "waiting":
@@ -322,6 +331,7 @@ def _next_confirmation(
 def _action_brief(
     customer: Mapping[str, Any],
     active_work: Optional[Mapping[str, Any]],
+    completed_today: bool,
 ) -> ActionBrief:
     stage = _text(customer.get("relationship_stage"))
     need = _text(customer.get("current_need"))
@@ -333,6 +343,21 @@ def _action_brief(
     work_next = _text(active_work.get("next_action")) if active_work else ""
 
     evidence: List[JudgmentEvidence] = []
+    if completed_today:
+        evidence.append(
+            JudgmentEvidence(
+                source="今日工作",
+                text="今天这一轮跟进已经结束。",
+            )
+        )
+        return ActionBrief(
+            mode="wait",
+            objective="本轮跟进今天已结束",
+            questions=[],
+            completion_criteria="今天无需重复处理；等待新的客户反馈、行为信号或下一次约定时间。",
+            opening_line="今天不需要再次主动联系；后续出现新信号或到约定时间后，再从最近一次进展继续。",
+            evidence=evidence,
+        )
     if need:
         evidence.append(JudgmentEvidence(source="当前需求", text=need))
     if work_next:
@@ -434,6 +459,7 @@ def _action_brief(
 def _communication_approach(
     customer: Mapping[str, Any],
     active_work: Optional[Mapping[str, Any]],
+    completed_today: bool,
 ) -> JudgmentItem:
     service = _profile(customer, "service_preferences")
     relationship = _profile(customer, "relationship_context")
@@ -461,6 +487,8 @@ def _communication_approach(
     )
     if stage == "rejected":
         text = f"冷静期内不主动营销触达；后续若恢复服务沟通，{preference_text}"
+    elif completed_today:
+        text = f"今天本轮跟进已经结束；后续需要再次联系时，{preference_text}"
     elif (
         active_work
         and _text(active_work.get("status")) == "waiting"
@@ -486,6 +514,7 @@ def _communication_approach(
 def _avoid_action(
     customer: Mapping[str, Any],
     active_work: Optional[Mapping[str, Any]],
+    completed_today: bool,
 ) -> JudgmentItem:
     stage = _text(customer.get("relationship_stage"))
     need = _text(customer.get("current_need"))
@@ -501,6 +530,11 @@ def _avoid_action(
         text = "避免产品推介和高频主动触达；冷静期内只保留必要服务"
         evidence.append(
             JudgmentEvidence(source="关系阶段", text="客户近期已明确拒绝")
+        )
+    elif completed_today:
+        text = "避免今天重复触达；等待新的客户反馈、行为信号或下一次约定时间"
+        evidence.append(
+            JudgmentEvidence(source="今日工作", text="今天这一轮跟进已经结束")
         )
     elif active_work and _text(active_work.get("status")) == "waiting" and _text(
         active_work.get("waiting_on")
@@ -543,12 +577,18 @@ def build_operating_judgment(
     *,
     activities: Sequence[Mapping[str, Any]],
     active_work: Optional[Mapping[str, Any]],
+    completed_today: bool = False,
     now: datetime,
 ) -> Dict[str, Any]:
     return {
         "generated_at": to_iso(now),
         "mode": "deterministic",
-        "current_state": _current_state(customer, active_work, activities).to_dict(),
+        "current_state": _current_state(
+            customer,
+            active_work,
+            activities,
+            completed_today,
+        ).to_dict(),
         "core_concern": _core_concern(customer, activities).to_dict(),
         "decision_barrier": _decision_barrier(
             customer,
@@ -556,10 +596,19 @@ def build_operating_judgment(
             activities,
         ).to_dict(),
         "next_confirmation": _next_confirmation(customer, active_work).to_dict(),
-        "action_brief": _action_brief(customer, active_work).to_dict(),
+        "action_brief": _action_brief(
+            customer,
+            active_work,
+            completed_today,
+        ).to_dict(),
         "communication_approach": _communication_approach(
             customer,
             active_work,
+            completed_today,
         ).to_dict(),
-        "avoid_action": _avoid_action(customer, active_work).to_dict(),
+        "avoid_action": _avoid_action(
+            customer,
+            active_work,
+            completed_today,
+        ).to_dict(),
     }

@@ -308,6 +308,10 @@ class WorkbenchService:
         }
 
     def customer_detail(self, customer_id: str) -> Dict[str, Any]:
+        now = self._now()
+        day_start, day_end = business_day_window(now)
+        day_start_iso = to_iso(day_start) or ""
+        day_end_iso = to_iso(day_end) or ""
         with connect(self.db_path) as conn:
             customer = repository.get_customer(conn, customer_id)
             if customer is None:
@@ -316,10 +320,17 @@ class WorkbenchService:
                 conn,
                 customer_id,
             )
+            completed_today = repository.customer_completed_in_window(
+                conn,
+                customer_id,
+                day_start_iso,
+                day_end_iso,
+            )
             activities = repository.list_activities(conn, customer_id)
             return {
                 "customer": customer,
                 "active_work_item": active_work,
+                "completed_today": completed_today,
                 "activities": activities,
                 "field_changes": repository.list_audits(conn, customer_id),
                 "pending_proposals": repository.list_change_proposals(
@@ -331,7 +342,8 @@ class WorkbenchService:
                     customer,
                     activities=activities,
                     active_work=active_work,
-                    now=self._now(),
+                    completed_today=completed_today,
+                    now=now,
                 ),
             }
 
@@ -494,6 +506,115 @@ class WorkbenchService:
             work_item = repository.get_work_item(conn, work_item_id)
             assert work_item is not None
             return work_item
+
+    def cancel_work(self, work_item_id: int) -> Dict[str, Any]:
+        now_iso = to_iso(self._now()) or ""
+        with transaction(self.db_path) as conn:
+            work_item = repository.get_work_item(conn, work_item_id)
+            if work_item is None:
+                raise WorkItemNotFoundError(work_item_id)
+            if work_item["status"] not in repository.ACTIVE_WORK_STATUSES:
+                raise InvalidWorkStateError("只有进行中的工作项可以取消跟进")
+
+            customer = repository.get_customer(conn, work_item["customer_id"])
+            if customer is None:
+                raise CustomerNotFoundError(work_item["customer_id"])
+
+            activity_id = repository.insert_activity(
+                conn,
+                {
+                    "customer_id": customer["customer_id"],
+                    "source": "manual",
+                    "channel": "system",
+                    "activity_type": "work_cancelled",
+                    "occurred_at": now_iso,
+                    "raw_content": "",
+                    "structured_summary": "客户经理取消本次跟进；客户经营状态未发生变化。",
+                    "customer_feedback": "",
+                    "action_taken": "取消跟进",
+                    "next_step": customer.get("next_step") or "",
+                    "next_contact_at": customer.get("next_contact_at"),
+                    "stage_after": customer.get("relationship_stage"),
+                    "intent_after": customer.get("intent_level"),
+                    "metadata": {
+                        "work_item_id": work_item_id,
+                        "previous_status": work_item["status"],
+                    },
+                    "created_at": now_iso,
+                },
+            )
+            repository.update_work_item(
+                conn,
+                work_item_id,
+                {
+                    "status": "cancelled",
+                    "waiting_on": "none",
+                    "updated_at": now_iso,
+                },
+            )
+            updated = repository.get_work_item(conn, work_item_id)
+            assert updated is not None
+            return {
+                "work_item": updated,
+                "customer": customer,
+                "activity_id": activity_id,
+            }
+
+    def complete_work(self, work_item_id: int) -> Dict[str, Any]:
+        now_iso = to_iso(self._now()) or ""
+        with transaction(self.db_path) as conn:
+            work_item = repository.get_work_item(conn, work_item_id)
+            if work_item is None:
+                raise WorkItemNotFoundError(work_item_id)
+            if work_item["status"] not in repository.ACTIVE_WORK_STATUSES:
+                raise InvalidWorkStateError("只有进行中的工作项可以结束跟进")
+
+            customer = repository.get_customer(conn, work_item["customer_id"])
+            if customer is None:
+                raise CustomerNotFoundError(work_item["customer_id"])
+
+            activity_id = repository.insert_activity(
+                conn,
+                {
+                    "customer_id": customer["customer_id"],
+                    "source": "manual",
+                    "channel": "system",
+                    "activity_type": "work_completed",
+                    "occurred_at": now_iso,
+                    "raw_content": "",
+                    "structured_summary": "客户经理手动结束本轮跟进；未新增客户沟通，也未修改客户经营状态。",
+                    "customer_feedback": "",
+                    "action_taken": "结束跟进",
+                    "next_step": customer.get("next_step") or "",
+                    "next_contact_at": customer.get("next_contact_at"),
+                    "stage_after": customer.get("relationship_stage"),
+                    "intent_after": customer.get("intent_level"),
+                    "metadata": {
+                        "work_item_id": work_item_id,
+                        "previous_status": work_item["status"],
+                        "completion_mode": "manual_close",
+                    },
+                    "created_at": now_iso,
+                },
+            )
+            repository.update_work_item(
+                conn,
+                work_item_id,
+                {
+                    "status": "completed_today",
+                    "waiting_on": "none",
+                    "completed_at": now_iso,
+                    "completion_activity_id": activity_id,
+                    "updated_at": now_iso,
+                },
+            )
+            updated = repository.get_work_item(conn, work_item_id)
+            assert updated is not None
+            return {
+                "work_item": updated,
+                "customer": customer,
+                "activity_id": activity_id,
+            }
 
     def set_pin(self, customer_id: str, pinned: bool) -> Dict[str, Any]:
         now_iso = to_iso(self._now()) or ""
