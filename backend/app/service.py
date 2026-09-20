@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence
 
 from . import repository
+from .ai_client import KimiError
 from .ai_service import AIService, AI_MUTABLE_FIELDS
 from .context_pack import ContextPackService
 from .db import PathLike, connect, transaction
@@ -69,7 +70,7 @@ class WorkbenchService:
             "working_name": True,
             "positioning": "证券客户经理日常客户经营辅助原型",
             "data_notice": "全部客户均为模拟数据，不连接任何券商内部系统。",
-            "ai": self.ai.status(),
+            "ai": {"configured": self.ai.status()["configured"]},
             "demo_time": to_iso(self._now()),
             "compliance": [
                 "发现区优先级仅用于安排客户经理工作顺序",
@@ -206,6 +207,70 @@ class WorkbenchService:
                     customer_id=customer_id,
                     status="pending",
                 ),
+            }
+
+    def quick_record_prepare(
+        self,
+        *,
+        raw_content: str,
+        channel: str,
+    ) -> Dict[str, Any]:
+        content = raw_content.strip()
+        if not content:
+            raise ValueError("请先输入客户姓名和本次发生的事情")
+
+        normalized = content.casefold()
+        with connect(self.db_path) as conn:
+            customers = repository.list_customers(conn)
+
+        matches = [
+            customer
+            for customer in customers
+            if customer["name"] in content
+            or customer["customer_id"].casefold() in normalized
+        ]
+
+        if not matches:
+            raise ValueError("没有识别到客户，请在记录里写明客户姓名或客户编号")
+        unique = {customer["customer_id"]: customer for customer in matches}
+        if len(unique) > 1:
+            names = "、".join(customer["name"] for customer in unique.values())
+            raise ValueError(f"识别到多个客户（{names}），请一次只记录一位客户")
+
+        customer = next(iter(unique.values()))
+        try:
+            preview = self.ai.preview_interaction(
+                customer_id=customer["customer_id"],
+                raw_content=content,
+                channel=channel,
+                now=self._now(),
+            )
+            return {
+                "customer": customer,
+                "ai_ready": True,
+                "warning": None,
+                **preview,
+            }
+        except KimiError:
+            return {
+                "customer": customer,
+                "ai_ready": False,
+                "warning": "智能整理暂不可用，已识别客户；可以手工补全后直接保存。",
+                "suggested_interaction": {
+                    "structured_summary": "",
+                    "customer_feedback": "",
+                    "relationship_stage": customer["relationship_stage"],
+                    "intent_level": customer["intent_level"],
+                    "current_need": customer["current_need"],
+                    "current_obstacle": customer["current_obstacle"],
+                    "next_step": customer["next_step"],
+                    "next_contact_at": customer["next_contact_at"],
+                    "outcome": "completed",
+                    "waiting_on": "none",
+                    "reasoning_summary": "",
+                    "confidence": 0,
+                },
+                "usage": {},
             }
 
     def start_work(self, customer_id: str) -> Dict[str, Any]:

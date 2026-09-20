@@ -86,6 +86,70 @@ class V1FeatureTests(unittest.TestCase):
         self.assertEqual(len(customers), 40)
         self.assertEqual(customers[0]["customer"]["customer_id"][:1], "C")
 
+    def test_seed_profiles_are_rich_and_separate_hypotheses(self):
+        customer = self.service.customer_detail("C001")["customer"]
+        profile = customer["profile"]
+        self.assertIn("demographics", profile)
+        self.assertIn("family_and_life", profile)
+        self.assertIn("financial_context", profile)
+        self.assertIn("investment_context", profile)
+        self.assertIn("service_preferences", profile)
+        self.assertIn("relationship_context", profile)
+        self.assertTrue(customer["profile_hypotheses"])
+        self.assertEqual(
+            customer["profile_hypotheses"][0]["status"],
+            "needs_validation",
+        )
+
+    def test_customer_search_includes_rich_profile_text(self):
+        results = self.service.customers(search="软件工程师")
+        self.assertTrue(results)
+        self.assertTrue(
+            any(
+                item["customer"]["profile"]["demographics"]["occupation"]
+                == "软件工程师"
+                for item in results
+            )
+        )
+
+    def test_context_pack_uses_rich_profile_but_redacts_precise_address(self):
+        pack = self.service.ai_context("C001")
+        self.assertIn("【财务与投资背景】", pack["text"])
+        self.assertIn("【沟通与关系画像】", pack["text"])
+        self.assertIn("【待验证经营假设】", pack["text"])
+        self.assertIn("precise_address", pack["redacted_fields"])
+
+    def test_public_service_tier_names_replace_unfounded_card_labels(self):
+        customers = self.service.customers()
+        tiers = {item["customer"]["customer_level"] for item in customers}
+        self.assertTrue(tiers)
+        self.assertTrue(
+            tiers.issubset(
+                {"Gold", "Platinum", "Black Gold", "Diamond", "Black Diamond"}
+            )
+        )
+
+    def test_global_quick_record_resolves_customer_name_before_ai(self):
+        prepared = self.service.quick_record_prepare(
+            raw_content="周婷刚刚说资料已经看过了，明天下午回复我。",
+            channel="phone",
+        )
+        self.assertEqual(prepared["customer"]["customer_id"], "C005")
+        self.assertTrue(prepared["ai_ready"])
+        self.assertIn("suggested_interaction", prepared)
+
+    def test_global_quick_record_requires_one_explicit_customer(self):
+        with self.assertRaises(ValueError):
+            self.service.quick_record_prepare(
+                raw_content="刚刚客户说资料看过了，明天回复。",
+                channel="phone",
+            )
+        with self.assertRaises(ValueError):
+            self.service.quick_record_prepare(
+                raw_content="张明远和周婷今天都联系过了。",
+                channel="phone",
+            )
+
     def test_demo_time_advance_releases_scheduled_customer(self):
         before = {
             item["customer"]["customer_id"]

@@ -24,6 +24,11 @@ class AIExtractRequest(BaseModel):
     channel: Channel = "phone"
 
 
+class QuickRecordPrepareRequest(BaseModel):
+    raw_content: str = Field(min_length=1, max_length=8000)
+    channel: Channel = "phone"
+
+
 class PinRequest(BaseModel):
     pinned: bool
 

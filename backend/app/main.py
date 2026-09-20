@@ -9,6 +9,7 @@ from .schemas import (
     DemoTimeRequest,
     InteractionRequest,
     PinRequest,
+    QuickRecordPrepareRequest,
 )
 from .service import (
     CustomerNotFoundError,
@@ -49,9 +50,9 @@ def _http_error(exc: Exception) -> HTTPException:
     if isinstance(exc, InvalidWorkStateError):
         return HTTPException(status_code=409, detail=str(exc))
     if isinstance(exc, KimiUnavailableError):
-        return HTTPException(status_code=503, detail="Kimi K3 尚未配置")
+        return HTTPException(status_code=503, detail="智能整理服务尚未配置，可继续手工记录")
     if isinstance(exc, KimiError):
-        return HTTPException(status_code=502, detail=str(exc))
+        return HTTPException(status_code=502, detail="智能整理服务暂时不可用，可继续手工记录")
     if isinstance(exc, ValueError):
         return HTTPException(status_code=422, detail=str(exc))
     return HTTPException(status_code=500, detail="未处理的服务错误")
@@ -101,6 +102,17 @@ def customers(
 def customer_detail(customer_id: str):
     try:
         return service.customer_detail(customer_id)
+    except Exception as exc:
+        raise _http_error(exc)
+
+
+@app.post("/api/quick-record/prepare")
+def quick_record_prepare(payload: QuickRecordPrepareRequest):
+    try:
+        return service.quick_record_prepare(
+            raw_content=payload.raw_content,
+            channel=payload.channel,
+        )
     except Exception as exc:
         raise _http_error(exc)
 

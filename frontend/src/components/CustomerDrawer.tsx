@@ -35,6 +35,25 @@ const intentLabels: Record<string, string> = {
   high: "高",
 };
 
+function listText(value: string[] | undefined): string {
+  return value?.length ? value.join("、") : "未记录";
+}
+
+function ProfileItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | undefined;
+}) {
+  return (
+    <div className="panorama-item">
+      <span>{label}</span>
+      <strong>{value || "未记录"}</strong>
+    </div>
+  );
+}
+
 export default function CustomerDrawer({
   customerId,
   onClose,
@@ -173,7 +192,7 @@ export default function CustomerDrawer({
                     </strong>
                   </div>
                   <div>
-                    <span>客户等级</span>
+                    <span>服务层级（模拟）</span>
                     <strong>{query.data.customer.customer_level}</strong>
                   </div>
                   <div>
@@ -228,10 +247,148 @@ export default function CustomerDrawer({
                 </div>
               </section>
 
+              <section className="panorama-card">
+                <div className="section-title-row compact-heading">
+                  <div>
+                    <p className="eyebrow">CLIENT PANORAMA</p>
+                    <h3>客户全景画像</h3>
+                    <p className="muted">
+                      已确认事实与经营偏好；精确住址等非必要敏感信息不进入演示数据。
+                    </p>
+                  </div>
+                </div>
+
+                <div className="panorama-group">
+                  <h4>生活与职业</h4>
+                  <div className="panorama-grid">
+                    <ProfileItem
+                      label="居住区域"
+                      value={query.data.customer.profile.demographics?.residence_region}
+                    />
+                    <ProfileItem
+                      label="职业"
+                      value={query.data.customer.profile.demographics?.occupation}
+                    />
+                    <ProfileItem
+                      label="行业"
+                      value={query.data.customer.profile.demographics?.industry}
+                    />
+                    <ProfileItem
+                      label="单位类型"
+                      value={query.data.customer.profile.demographics?.employer_type}
+                    />
+                    <ProfileItem
+                      label="家庭阶段"
+                      value={query.data.customer.profile.family_and_life?.family_stage}
+                    />
+                    <ProfileItem
+                      label="家庭责任"
+                      value={query.data.customer.profile.family_and_life?.dependents_summary}
+                    />
+                  </div>
+                  <div className="panorama-wide">
+                    <span>未来重要安排</span>
+                    <strong>
+                      {query.data.customer.profile.family_and_life?.major_plan || "未记录"}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="panorama-group">
+                  <h4>财务与投资背景</h4>
+                  <div className="panorama-grid">
+                    <ProfileItem
+                      label="年收入区间"
+                      value={query.data.customer.profile.financial_context?.annual_income_band}
+                    />
+                    <ProfileItem
+                      label="负债区间"
+                      value={query.data.customer.profile.financial_context?.liabilities_band}
+                    />
+                    <ProfileItem
+                      label="现金流特征"
+                      value={query.data.customer.profile.financial_context?.cash_flow_pattern}
+                    />
+                    <ProfileItem
+                      label="流动性偏好"
+                      value={query.data.customer.profile.financial_context?.liquidity_preference}
+                    />
+                    <ProfileItem
+                      label="投资经验"
+                      value={query.data.customer.profile.investment_context?.experience}
+                    />
+                    <ProfileItem
+                      label="主要投资目标"
+                      value={query.data.customer.profile.investment_context?.primary_goal}
+                    />
+                    <ProfileItem
+                      label="投资期限"
+                      value={query.data.customer.profile.investment_context?.investment_horizon}
+                    />
+                    <ProfileItem
+                      label="信息偏好"
+                      value={query.data.customer.profile.investment_context?.information_preference}
+                    />
+                  </div>
+                </div>
+
+                <div className="panorama-group">
+                  <h4>沟通与关系画像</h4>
+                  <div className="panorama-grid">
+                    <ProfileItem
+                      label="偏好渠道"
+                      value={query.data.customer.profile.service_preferences?.preferred_channel}
+                    />
+                    <ProfileItem
+                      label="偏好联系时间"
+                      value={query.data.customer.profile.service_preferences?.preferred_contact_time}
+                    />
+                  </div>
+                  <div className="panorama-wide">
+                    <span>沟通偏好</span>
+                    <strong>
+                      {query.data.customer.profile.service_preferences?.communication_style || "未记录"}
+                    </strong>
+                  </div>
+                  <div className="panorama-tags">
+                    <div>
+                      <span>兴趣</span>
+                      <p>{listText(query.data.customer.profile.relationship_context?.interests)}</p>
+                    </div>
+                    <div>
+                      <span>主要顾虑</span>
+                      <p>{listText(query.data.customer.profile.relationship_context?.key_concerns)}</p>
+                    </div>
+                    <div>
+                      <span>建立信任的因素</span>
+                      <p>{listText(query.data.customer.profile.relationship_context?.trust_factors)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {query.data.customer.profile_hypotheses.length > 0 && (
+                  <div className="hypothesis-panel">
+                    <div>
+                      <strong>待验证经营假设</strong>
+                      <span>不是客户事实，只用于提示下一次沟通需要验证什么。</span>
+                    </div>
+                    {query.data.customer.profile_hypotheses.map((item) => (
+                      <article key={item.key}>
+                        <div>
+                          <strong>{item.value}</strong>
+                          <span>置信度 {Math.round(item.confidence * 100)}%</span>
+                        </div>
+                        <p>{item.basis}</p>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+
               <section className="ai-tools-card">
                 <div className="ai-tools-head">
                   <div>
-                    <p className="eyebrow">KIMI K3</p>
+                    <p className="eyebrow">INTELLIGENT ASSIST</p>
                     <h3>AI 经营辅助</h3>
                     <p className="muted">
                       摘要只读；咨询上下文默认脱敏后复制给更强 AI。
@@ -300,9 +457,8 @@ export default function CustomerDrawer({
                           <div>
                             <strong>{proposal.extraction_summary}</strong>
                             <span>
-                              {proposal.model ?? "AI"} ·{" "}
                               {proposal.confidence != null
-                                ? String(Math.round(proposal.confidence * 100)) + "%"
+                                ? "候选置信度 " + String(Math.round(proposal.confidence * 100)) + "%"
                                 : "待确认"}
                             </span>
                           </div>

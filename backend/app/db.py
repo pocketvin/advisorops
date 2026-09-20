@@ -62,6 +62,8 @@ def init_db(db_path: Optional[PathLike] = None) -> None:
                 risk_level TEXT NOT NULL,
                 total_assets_band TEXT NOT NULL,
                 investable_funds_band TEXT NOT NULL,
+                profile_json TEXT NOT NULL DEFAULT '{}',
+                profile_hypotheses_json TEXT NOT NULL DEFAULT '[]',
                 holdings_summary TEXT NOT NULL DEFAULT '',
                 recent_login_at TEXT,
                 recent_trade_at TEXT,
@@ -220,6 +222,8 @@ def init_db(db_path: Optional[PathLike] = None) -> None:
             "recent_product_interest": "TEXT NOT NULL DEFAULT ''",
             "recent_consult_topic": "TEXT NOT NULL DEFAULT ''",
             "manager_note": "TEXT NOT NULL DEFAULT ''",
+            "profile_json": "TEXT NOT NULL DEFAULT '{}'",
+            "profile_hypotheses_json": "TEXT NOT NULL DEFAULT '[]'",
         }
         for name, definition in additions.items():
             if name not in current_columns:

@@ -158,7 +158,7 @@ export default function CustomerListView({ onOpenCustomer }: Props) {
                     <div className="table-customer">
                       <strong>{customer.name}</strong>
                       <span>
-                        {customer.customer_id} · {customer.customer_level} ·{" "}
+                        {customer.customer_id} · 服务 {customer.customer_level} ·{" "}
                         {customer.risk_level} · {customer.total_assets_band}
                       </span>
                     </div>

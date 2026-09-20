@@ -10,6 +10,15 @@ def row_to_dict(row: Optional[sqlite3.Row]) -> Optional[Dict[str, Any]]:
     return dict(row) if row is not None else None
 
 
+def _decode_customer(item: Dict[str, Any]) -> Dict[str, Any]:
+    item["pinned"] = bool(item["pinned"])
+    item["profile"] = json.loads(item.pop("profile_json") or "{}")
+    item["profile_hypotheses"] = json.loads(
+        item.pop("profile_hypotheses_json") or "[]"
+    )
+    return item
+
+
 def get_customer(conn: sqlite3.Connection, customer_id: str) -> Optional[Dict[str, Any]]:
     row = conn.execute(
         "SELECT * FROM customers WHERE customer_id = ?",
@@ -17,23 +26,31 @@ def get_customer(conn: sqlite3.Connection, customer_id: str) -> Optional[Dict[st
     ).fetchone()
     item = row_to_dict(row)
     if item is not None:
-        item["pinned"] = bool(item["pinned"])
-    return item
+        return _decode_customer(item)
+    return None
 
 
 def list_customers(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
     rows = conn.execute("SELECT * FROM customers ORDER BY customer_id").fetchall()
     result: List[Dict[str, Any]] = []
     for row in rows:
-        item = dict(row)
-        item["pinned"] = bool(item["pinned"])
-        result.append(item)
+        result.append(_decode_customer(dict(row)))
     return result
 
 
 def insert_customer(conn: sqlite3.Connection, customer: Mapping[str, Any]) -> None:
     payload = dict(customer)
     payload["pinned"] = 1 if payload.get("pinned") else 0
+    payload["profile_json"] = json.dumps(
+        payload.pop("profile", {}),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    payload["profile_hypotheses_json"] = json.dumps(
+        payload.pop("profile_hypotheses", []),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
     columns = ", ".join(payload.keys())
     placeholders = ", ".join(["?"] * len(payload))
     conn.execute(
@@ -52,6 +69,18 @@ def update_customer(
     payload = dict(updates)
     if "pinned" in payload:
         payload["pinned"] = 1 if payload["pinned"] else 0
+    if "profile" in payload:
+        payload["profile_json"] = json.dumps(
+            payload.pop("profile"),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    if "profile_hypotheses" in payload:
+        payload["profile_hypotheses_json"] = json.dumps(
+            payload.pop("profile_hypotheses"),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
     assignments = ", ".join(f"{field} = ?" for field in payload)
     conn.execute(
         f"UPDATE customers SET {assignments} WHERE customer_id = ?",
@@ -533,10 +562,10 @@ def customer_search(
 
     if search.strip():
         clauses.append(
-            "(name LIKE ? OR customer_id LIKE ? OR current_need LIKE ? OR manager_note LIKE ?)"
+            "(name LIKE ? OR customer_id LIKE ? OR current_need LIKE ? OR manager_note LIKE ? OR profile_json LIKE ?)"
         )
         value = f"%{search.strip()}%"
-        params.extend([value, value, value, value])
+        params.extend([value, value, value, value, value])
     if stage:
         clauses.append("relationship_stage = ?")
         params.append(stage)
@@ -564,9 +593,7 @@ def customer_search(
     ).fetchall()
     result: List[Dict[str, Any]] = []
     for row in rows:
-        item = dict(row)
-        item["pinned"] = bool(item["pinned"])
-        result.append(item)
+        result.append(_decode_customer(dict(row)))
     return result
 
 

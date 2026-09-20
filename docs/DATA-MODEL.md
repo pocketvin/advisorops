@@ -28,7 +28,22 @@ Demo 仅使用模拟信息：
 - customer_id
 - display_name
 - age_band
-- customer_level
+- customer_level（服务层级；Demo 使用公开层级名称模拟，不模拟内部资产门槛）
+- profile_json（多维已确认客户画像）
+- profile_hypotheses_json（待验证经营假设）
+
+### 客户全景画像
+
+`profile_json` 采用分组 JSON，避免为每个画像标签增加数据库列：
+
+- demographics：粗粒度居住区域、职业、行业、单位类型
+- family_and_life：家庭阶段、家庭责任、未来重要安排
+- financial_context：收入区间、负债区间、现金流特征、流动性偏好
+- investment_context：投资经验、主要目标、投资期限、信息偏好
+- service_preferences：偏好渠道、联系时间、沟通方式
+- relationship_context：兴趣、主要顾虑、建立信任的因素
+
+`profile_hypotheses_json` 与事实严格分离，用于保存“决策风格”等待验证经营假设，并包含 confidence / basis / status。软画像暂不参与 Priority 加减分。
 
 ### 权威业务事实
 

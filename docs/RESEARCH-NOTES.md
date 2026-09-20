@@ -220,3 +220,27 @@ reasoning_effort = low
 - 给最终 JSON 留出更稳定的 completion 预算
 
 复杂客户沟通策略本身不在项目内强行用同一调用解决，而是通过脱敏 AI Context Pack 交给更强的独立 AI 会话。
+
+
+## 12. 客户服务层级与多维画像
+
+中信证券公开财富管理页面展示的零售客户服务层级包括 Gold、Platinum、Black Gold、Diamond、Black Diamond；公开页面展示的是服务层级和服务内容，不据此虚构内部资产门槛。
+
+参考：
+
+- https://www.citics.com/newsite/en/ourBusiness/wealthManage/
+- https://www.citics.com/newsite/ywzx/jjyw/khtx/201711/t20171129_94220.html
+
+行业公开研究显示，证券财富管理客户画像除了年龄、风险、资产等“数字画像”，还会结合客户经理在 KYC 中沉淀的家庭信息、投资目标、资金使用周期、兴趣爱好等“感性画像”；更完整的财富画像还应关注资产负债、现金流、人生阶段和未来重大安排。
+
+参考：
+
+- https://finance.sina.com.cn/wm/2020-06-09/doc-iircuyvi7573049.shtml
+- https://finance.sina.com.cn/money/fund/jjzl/2024-05-31/doc-inaxcnay0554730.shtml
+
+本项目因此采用：
+
+- 已确认多维画像：地域（粗粒度）、职业行业、家庭阶段、收入负债、现金流、投资经验和目标、沟通偏好、兴趣与顾虑；
+- 待验证经营假设：如决策风格，单独保存置信度和依据；
+- 软画像进入 AI 摘要和沟通准备，但不直接参与 Priority 打分；
+- 精确住址等非必要敏感信息不进入模拟数据。

@@ -101,7 +101,6 @@ export default function InteractionDrawer({
   const [aiNote, setAiNote] = useState<{
     reasoning: string;
     confidence: number;
-    model: string;
   } | null>(null);
 
   useEffect(() => {
@@ -139,7 +138,6 @@ export default function InteractionDrawer({
       setAiNote({
         reasoning: suggestion.reasoning_summary,
         confidence: suggestion.confidence,
-        model: result.proposal.model ?? "Kimi K3",
       });
     },
   });
@@ -195,7 +193,7 @@ export default function InteractionDrawer({
             <p className="eyebrow">记录经营进展</p>
             <h2>{customer?.name ?? "正在读取客户…"}</h2>
             <p className="muted">
-              原始记录始终保留；Kimi K3 只生成候选字段，最后由你确认。
+              原始记录始终保留；智能整理只生成候选字段，最后由你确认。
             </p>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="关闭">
@@ -262,7 +260,7 @@ export default function InteractionDrawer({
 
               <div className="ai-extract-row">
                 <div>
-                  <strong>Kimi K3 自动整理</strong>
+                  <strong>智能整理</strong>
                   <span>只预填候选结果，不会直接修改客户状态。</span>
                 </div>
                 <button
@@ -271,7 +269,7 @@ export default function InteractionDrawer({
                   disabled={!rawContent.trim() || aiMutation.isPending}
                   onClick={() => aiMutation.mutate()}
                 >
-                  {aiMutation.isPending ? "Kimi 正在整理…" : "AI 整理"}
+                  {aiMutation.isPending ? "正在整理…" : "智能整理"}
                 </button>
               </div>
 
@@ -284,7 +282,7 @@ export default function InteractionDrawer({
               {aiNote && (
                 <div className="ai-result-note">
                   <div>
-                    <span>AI 候选已填充 · {aiNote.model}</span>
+                    <span>候选信息已填充</span>
                     <strong>
                       置信度 {Math.round(aiNote.confidence * 100)}%
                     </strong>

@@ -69,7 +69,7 @@ function WorkCard({
         <div>
           <div className="identity-line">
             <h3>{item.name ?? item.customer_id}</h3>
-            <span>{item.customer_level ?? "客户"}</span>
+            <span>{"服务·" + (item.customer_level ?? "未设置")}</span>
           </div>
           <p className="muted small">
             {stageLabels[item.relationship_stage ?? ""] ?? item.relationship_stage} ·{" "}
@@ -157,7 +157,7 @@ function DiscoveryCard({
           <div>
             <div className="identity-line">
               <h3>{customer.name}</h3>
-              <span>{customer.customer_level}</span>
+              <span>{"服务·" + customer.customer_level}</span>
               {customer.pinned && <span className="pin-tag">人工关注</span>}
             </div>
             <p className="muted small">

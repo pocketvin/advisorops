@@ -84,6 +84,47 @@ class AIService:
     def status(self) -> Dict[str, Any]:
         return self.client.status()
 
+    def preview_interaction(
+        self,
+        *,
+        customer_id: str,
+        raw_content: str,
+        channel: str,
+        now=None,
+    ) -> Dict[str, Any]:
+        current_time = now or utc_now()
+        with connect(self.db_path) as conn:
+            customer = repository.get_customer(conn, customer_id)
+        if customer is None:
+            raise KeyError(customer_id)
+
+        result = None
+        for attempt in range(2):
+            try:
+                result = self.client.json_schema(
+                    system=interaction_system_prompt(),
+                    user=build_interaction_user_prompt(
+                        customer=customer,
+                        raw_content=raw_content,
+                        channel=channel,
+                        now=current_time,
+                    ),
+                    schema_name="interaction_extraction",
+                    schema=INTERACTION_SCHEMA,
+                    max_completion_tokens=2400,
+                )
+                break
+            except KimiError as exc:
+                if attempt == 0 and "structured response was invalid" in str(exc):
+                    continue
+                raise
+        assert result is not None
+
+        return {
+            "suggested_interaction": _validate_interaction_suggestion(result.data),
+            "usage": result.usage,
+        }
+
     def extract_interaction(
         self,
         *,
@@ -206,6 +247,8 @@ class AIService:
                 "current_progress": customer["current_progress"],
                 "next_step": customer["next_step"],
                 "next_contact_at": customer["next_contact_at"],
+                "profile": customer.get("profile") or {},
+                "profile_hypotheses": customer.get("profile_hypotheses") or [],
             },
             "active_work": active_work,
             "recent_activities": [

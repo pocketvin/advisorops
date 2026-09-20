@@ -8,6 +8,50 @@ export type RelationshipStage =
 
 export type IntentLevel = "unknown" | "low" | "medium" | "high";
 
+export interface CustomerProfile {
+  demographics?: {
+    residence_region?: string;
+    occupation?: string;
+    industry?: string;
+    employer_type?: string;
+  };
+  family_and_life?: {
+    family_stage?: string;
+    dependents_summary?: string;
+    major_plan?: string;
+  };
+  financial_context?: {
+    annual_income_band?: string;
+    liabilities_band?: string;
+    cash_flow_pattern?: string;
+    liquidity_preference?: string;
+  };
+  investment_context?: {
+    experience?: string;
+    primary_goal?: string;
+    investment_horizon?: string;
+    information_preference?: string;
+  };
+  service_preferences?: {
+    preferred_channel?: string;
+    preferred_contact_time?: string;
+    communication_style?: string;
+  };
+  relationship_context?: {
+    interests?: string[];
+    key_concerns?: string[];
+    trust_factors?: string[];
+  };
+}
+
+export interface ProfileHypothesis {
+  key: string;
+  value: string;
+  confidence: number;
+  status: "needs_validation" | string;
+  basis: string;
+}
+
 export interface Customer {
   customer_id: string;
   name: string;
@@ -16,6 +60,8 @@ export interface Customer {
   risk_level: string;
   total_assets_band: string;
   investable_funds_band: string;
+  profile: CustomerProfile;
+  profile_hypotheses: ProfileHypothesis[];
   holdings_summary: string;
   recent_login_at: string | null;
   recent_trade_at: string | null;
@@ -189,6 +235,14 @@ export interface AIExtraction {
   usage: Record<string, number>;
 }
 
+export interface QuickRecordPreparation {
+  customer: Customer;
+  ai_ready: boolean;
+  warning: string | null;
+  suggested_interaction: AIExtraction["suggested_interaction"];
+  usage: Record<string, number>;
+}
+
 export interface CustomerBrief {
   summary: string;
   main_focus: string;
@@ -230,9 +284,6 @@ export interface Meta {
   data_notice: string;
   ai: {
     configured: boolean;
-    model: string | null;
-    source: string;
-    base_url: string | null;
   };
   demo_time: string;
   compliance: string[];
@@ -295,6 +346,15 @@ export const api = {
 
   customer: (customerId: string) =>
     request<CustomerDetail>(`/api/customers/${customerId}`),
+
+  quickRecordPrepare: (payload: {
+    raw_content: string;
+    channel: InteractionPayload["channel"];
+  }) =>
+    request<QuickRecordPreparation>("/api/quick-record/prepare", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 
   manualWork: (customerId: string) =>
     request<WorkItem>(`/api/customers/${customerId}/manual-work`, {

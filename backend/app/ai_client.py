@@ -332,6 +332,8 @@ def build_interaction_user_prompt(
         "current_progress": customer.get("current_progress"),
         "next_step": customer.get("next_step"),
         "next_contact_at": customer.get("next_contact_at"),
+        "customer_profile": customer.get("profile") or {},
+        "profile_hypotheses": customer.get("profile_hypotheses") or [],
     }
     return (
         "当前时间（中国时区）: "
@@ -352,4 +354,6 @@ def brief_system_prompt() -> str:
 - 聚焦客户经营上下文，不写空泛套话。
 - 明确当前关注、障碍、尚未解决的问题以及下一次沟通最值得确认什么。
 - 不推荐具体投资产品，不做收益承诺，不替代适当性流程。
+- 结合家庭阶段、职业行业、现金流、投资目标、资金期限、沟通偏好等画像，但不得把画像标签当作确定结论。
+- profile_hypotheses 属于待验证经营假设，必须明确当作假设而不是事实。
 - 只依据输入信息，不编造。"""

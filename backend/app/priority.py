@@ -245,7 +245,13 @@ def evaluate_discovery(
         }.get(stage, "当前阶段"),
     )
 
-    value_points = {"钻石": 8, "铂金": 6, "金卡": 4}.get(
+    value_points = {
+        "Black Diamond": 8,
+        "Diamond": 7,
+        "Black Gold": 6,
+        "Platinum": 4,
+        "Gold": 2,
+    }.get(
         customer.get("customer_level"),
         0,
     )
@@ -254,7 +260,7 @@ def evaluate_discovery(
         "service_value",
         "客户服务价值",
         value_points,
-        f"客户等级：{customer.get('customer_level') or '普通'}；仅作轻权重辅助",
+        f"服务层级（模拟）：{customer.get('customer_level') or '未设置'}；仅作轻权重辅助，不模拟真实分层门槛",
     )
 
     score = max(0, min(100, sum(item.points for item in factors)))

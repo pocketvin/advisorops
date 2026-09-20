@@ -6,6 +6,7 @@ import ActivityFeedView from "./components/ActivityFeedView";
 import CustomerDrawer from "./components/CustomerDrawer";
 import CustomerListView from "./components/CustomerListView";
 import InteractionDrawer from "./components/InteractionDrawer";
+import QuickRecordDialog from "./components/QuickRecordDialog";
 import WorkbenchView from "./components/WorkbenchView";
 
 type View = "workbench" | "customers" | "activities";
@@ -29,6 +30,7 @@ export default function App() {
     customerId: string;
   } | null>(null);
   const [demoOpen, setDemoOpen] = useState(false);
+  const [quickRecordOpen, setQuickRecordOpen] = useState(false);
 
   const metaQuery = useQuery({
     queryKey: ["meta"],
@@ -89,18 +91,12 @@ export default function App() {
         </nav>
 
         <div className="topbar-actions">
-          <div
-            className={
-              metaQuery.data?.ai.configured
-                ? "demo-notice ai-online"
-                : "demo-notice"
-            }
+          <button
+            className="button primary topbar-record-button"
+            onClick={() => setQuickRecordOpen(true)}
           >
-            <span className="live-dot" />
-            {metaQuery.data?.ai.configured
-              ? metaQuery.data.ai.model + " 已接入"
-              : "AI 未配置"}
-          </div>
+            记录进展
+          </button>
 
           <div className="demo-menu-wrap">
             <button
@@ -174,6 +170,10 @@ export default function App() {
             setComposer({ workItemId, customerId });
           }}
         />
+      )}
+
+      {quickRecordOpen && (
+        <QuickRecordDialog onClose={() => setQuickRecordOpen(false)} />
       )}
 
       {composer && (

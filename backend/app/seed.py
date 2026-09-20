@@ -16,10 +16,133 @@ NAMES = [
     "宋知微", "马启辰", "谢雨凡", "邓知夏", "方一诺", "江予舟", "白安琪", "高云帆",
 ]
 
-LEVELS = ["普通", "银卡", "金卡", "铂金", "钻石"]
+LEVELS = ["Gold", "Platinum", "Black Gold", "Diamond", "Black Diamond"]
 RISKS = ["C2", "C3", "C3", "C4"]
 ASSET_BANDS = ["10-30万", "30-80万", "80-150万", "150-300万", "300万以上"]
 FUND_BANDS = ["5万以内", "5-20万", "20-50万", "50-100万", "100万以上"]
+
+
+RESIDENCE_REGIONS = [
+    "杭州·临平", "杭州·余杭", "杭州·西湖", "杭州·滨江", "杭州·上城",
+    "上海·浦东", "上海·徐汇", "宁波·鄞州", "绍兴·越城", "嘉兴·南湖",
+]
+OCCUPATIONS = [
+    ("软件工程师", "互联网/软件", "民营企业"),
+    ("企业中层管理", "先进制造", "民营企业"),
+    ("小微企业主", "商贸零售", "自营企业"),
+    ("医生", "医疗健康", "事业单位"),
+    ("教师", "教育", "事业单位"),
+    ("财务负责人", "专业服务", "民营企业"),
+    ("销售负责人", "消费品", "民营企业"),
+    ("产品经理", "互联网/软件", "民营企业"),
+    ("退休人员", "退休", "退休"),
+    ("自由职业者", "创意/设计", "自由职业"),
+]
+FAMILY_STAGES = [
+    "单身独居", "新婚家庭", "育有学龄前子女", "育有学龄子女", "子女升学阶段",
+    "家庭责任较重", "空巢阶段", "临近退休", "已退休", "三代同堂",
+]
+INCOME_BANDS = ["20-30万", "30-50万", "50-80万", "80-150万", "150万以上"]
+LIABILITY_BANDS = ["无明显负债", "20万以内", "20-80万", "80-200万", "200万以上"]
+CASH_FLOW_PATTERNS = ["月度稳定", "奖金占比较高", "经营性现金流波动", "季节性明显", "退休现金流稳定"]
+INVESTMENT_EXPERIENCE = ["1-3年", "3-5年", "5-10年", "10年以上", "经验较少"]
+INVESTMENT_GOALS = ["稳健增值", "长期成长", "退休准备", "子女教育", "流动性管理", "分散配置"]
+INVESTMENT_HORIZONS = ["1年以内", "1-3年", "3-5年", "5年以上"]
+CONTACT_CHANNELS = ["电话", "企业微信", "线下", "企业微信+电话", "App消息"]
+CONTACT_TIMES = ["工作日上午", "工作日下午", "午休前后", "工作日晚间", "周末上午"]
+COMMUNICATION_STYLES = [
+    "偏好简洁结论，再看细节",
+    "偏好数据和研究依据",
+    "需要较充分解释风险和机制",
+    "更接受电话沟通，不喜欢长文字",
+    "偏好先文字说明，再预约电话",
+]
+DECISION_STYLES = [
+    "独立决策，节奏较快",
+    "习惯比较多种方案后决定",
+    "重大事项会与家人共同商量",
+    "决策偏慢，需要多次确认",
+    "对外部事件敏感，容易阶段性改变计划",
+]
+INTERESTS = [
+    ["跑步", "科技产品"],
+    ["亲子教育", "旅行"],
+    ["汽车", "摄影"],
+    ["阅读", "健康管理"],
+    ["球类运动", "商业资讯"],
+]
+KEY_CONCERNS = [
+    ["流动性", "最大回撤"],
+    ["资金安全", "信息透明"],
+    ["费用", "操作复杂度"],
+    ["政策变化", "市场波动"],
+    ["家庭资金安排", "长期可持续性"],
+]
+TRUST_FACTORS = [
+    ["研究依据充分", "不频繁打扰"],
+    ["风险讲清楚", "按约定时间跟进"],
+    ["信息简洁", "响应及时"],
+    ["长期服务一致性", "先理解需求再谈方案"],
+    ["数据透明", "不做收益承诺"],
+]
+MAJOR_PLANS = [
+    "未来两年可能购置改善型住房",
+    "子女教育支出将逐步增加",
+    "未来三年计划扩大经营投入",
+    "开始考虑退休现金流安排",
+    "暂无明确大额支出计划",
+]
+
+
+def _rich_profile(index: int) -> Dict[str, object]:
+    occupation, industry, employer_type = OCCUPATIONS[index % len(OCCUPATIONS)]
+    return {
+        "demographics": {
+            "residence_region": RESIDENCE_REGIONS[index % len(RESIDENCE_REGIONS)],
+            "occupation": occupation,
+            "industry": industry,
+            "employer_type": employer_type,
+        },
+        "family_and_life": {
+            "family_stage": FAMILY_STAGES[index % len(FAMILY_STAGES)],
+            "dependents_summary": ["无明确赡养压力", "需承担子女教育", "需兼顾父母养老"][index % 3],
+            "major_plan": MAJOR_PLANS[index % len(MAJOR_PLANS)],
+        },
+        "financial_context": {
+            "annual_income_band": INCOME_BANDS[index % len(INCOME_BANDS)],
+            "liabilities_band": LIABILITY_BANDS[index % len(LIABILITY_BANDS)],
+            "cash_flow_pattern": CASH_FLOW_PATTERNS[index % len(CASH_FLOW_PATTERNS)],
+            "liquidity_preference": ["高", "中高", "中", "中低"][index % 4],
+        },
+        "investment_context": {
+            "experience": INVESTMENT_EXPERIENCE[index % len(INVESTMENT_EXPERIENCE)],
+            "primary_goal": INVESTMENT_GOALS[index % len(INVESTMENT_GOALS)],
+            "investment_horizon": INVESTMENT_HORIZONS[index % len(INVESTMENT_HORIZONS)],
+            "information_preference": ["研究报告", "图表摘要", "简短要点", "电话讲解"][index % 4],
+        },
+        "service_preferences": {
+            "preferred_channel": CONTACT_CHANNELS[index % len(CONTACT_CHANNELS)],
+            "preferred_contact_time": CONTACT_TIMES[index % len(CONTACT_TIMES)],
+            "communication_style": COMMUNICATION_STYLES[index % len(COMMUNICATION_STYLES)],
+        },
+        "relationship_context": {
+            "interests": INTERESTS[index % len(INTERESTS)],
+            "key_concerns": KEY_CONCERNS[index % len(KEY_CONCERNS)],
+            "trust_factors": TRUST_FACTORS[index % len(TRUST_FACTORS)],
+        },
+    }
+
+
+def _profile_hypotheses(index: int) -> List[Dict[str, object]]:
+    return [
+        {
+            "key": "decision_style",
+            "value": DECISION_STYLES[index % len(DECISION_STYLES)],
+            "confidence": round(0.58 + (index % 4) * 0.08, 2),
+            "status": "needs_validation",
+            "basis": "基于历史沟通节奏形成的经营假设，下一次沟通应继续验证。",
+        }
+    ]
 
 
 def _customer(
@@ -41,6 +164,8 @@ def _customer(
         "risk_level": RISKS[index % len(RISKS)],
         "total_assets_band": ASSET_BANDS[index % len(ASSET_BANDS)],
         "investable_funds_band": FUND_BANDS[(index + 1) % len(FUND_BANDS)],
+        "profile": _rich_profile(index),
+        "profile_hypotheses": _profile_hypotheses(index),
         "holdings_summary": [
             "现金管理 + 权益基金",
             "股票 + 现金管理",
@@ -94,7 +219,7 @@ def _customers(now: datetime) -> List[Dict[str, object]]:
     customers = [_customer(index, now) for index in range(40)]
     scenarios: Dict[str, Dict[str, object]] = {
         "C001": {
-            "customer_level": "铂金",
+            "customer_level": "Platinum",
             "relationship_stage": "considering",
             "intent_level": "high",
             "current_need": "在保持流动性的前提下重新梳理资产配置",
@@ -105,7 +230,7 @@ def _customers(now: datetime) -> List[Dict[str, object]]:
             "last_contact_at": to_iso(now - timedelta(days=4)),
         },
         "C002": {
-            "customer_level": "金卡",
+            "customer_level": "Gold",
             "relationship_stage": "contacted",
             "intent_level": "medium",
             "current_need": "确认近期资金安排是否发生变化",
@@ -127,7 +252,7 @@ def _customers(now: datetime) -> List[Dict[str, object]]:
             "last_contact_at": to_iso(now - timedelta(hours=6)),
         },
         "C004": {
-            "customer_level": "铂金",
+            "customer_level": "Platinum",
             "relationship_stage": "interested",
             "intent_level": "high",
             "current_need": "明确长期资金用途和可投资期限",

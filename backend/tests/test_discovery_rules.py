@@ -11,7 +11,7 @@ NOW = datetime(2026, 9, 20, 5, 0, tzinfo=timezone.utc)
 def customer(**overrides):
     value = {
         "customer_id": "T001",
-        "customer_level": "金卡",
+        "customer_level": "Gold",
         "relationship_stage": "interested",
         "intent_level": "high",
         "last_contact_at": to_iso(NOW - timedelta(days=5)),
