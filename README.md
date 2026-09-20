@@ -73,7 +73,20 @@ Discovery Engine
 
 “决策偏慢”“重大事项会与家人商量”等软判断单独保存为 **待验证经营假设**，不作为事实，也不直接参与 Priority。
 
-### 4. 客户动态 / 多源信息
+### 4. 客户经营判断
+
+客户详情第一屏先回答客户经理真正需要的六个问题：
+
+- 现在处于什么状态；
+- 当前真正关心什么；
+- 最大的决策障碍是什么；
+- 下一次最该确认什么；
+- 更合适的沟通方式；
+- 当前应该避免什么。
+
+经营判断由已确认 Snapshot、WorkItem、最近 Activity 和画像即时生成，不额外调用模型。每条结论都可以展开查看依据；若引用 profile hypothesis，会明确标记为“待验证”，避免把心理推测当成客户事实。
+
+### 5. 客户动态 / 多源信息
 
 V0.6 提供三个 Mock 数据源：CRM、企业微信、行为数据，演示：
 
@@ -83,7 +96,7 @@ V0.6 提供三个 Mock 数据源：CRM、企业微信、行为数据，演示：
 - 解释性变化生成 Change Proposal；
 - 人工确认后才更新 Customer Snapshot。
 
-### 5. 批量客户管理
+### 6. 批量客户管理
 
 “全部客户”支持：
 
@@ -129,6 +142,7 @@ React + TypeScript + TanStack Query
 | service.py | 业务流程编排 |
 | repository.py | SQLite 数据访问 |
 | priority.py | Discovery eligibility + Priority |
+| judgment.py | 可追溯客户经营判断 |
 | ai_service.py | 沟通抽取、摘要、Change Proposal |
 | sync_service.py | 外部事件增量同步与幂等 |
 | import_service.py | CSV 字段归一化、预览、校验 |

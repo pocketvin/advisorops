@@ -75,6 +75,7 @@ backend/app/
   service.py
   repository.py
   priority.py
+  judgment.py
   ai_service.py
   ai_client.py
   sync_service.py
@@ -174,6 +175,15 @@ V1 模拟数据允许重建数据库，因此不急于引入 Alembic；开始保
 - Change Proposal
 
 Next Best Action 的 V1 文案由 deterministic rules 直接给出，不在每次工作台刷新时调用模型。
+
+### OperatingJudgment
+
+- 从 Current Snapshot / WorkItem / 最近 Activity / Profile 即时生成客户经营判断
+- 不调用外部模型
+- 每条结论保留 Evidence
+- profile hypothesis 单独标识为待验证
+- 最近明确事实优先于长期画像
+- 只读，不修改 Customer Snapshot
 
 ### ContextPackService
 

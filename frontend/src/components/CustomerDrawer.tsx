@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api, type SavedAttachment } from "../api";
+import { api, type JudgmentItem, type SavedAttachment } from "../api";
 
 interface Props {
   customerId: string;
@@ -45,6 +45,46 @@ function activityAttachments(
   const value = metadata?.attachments;
   return Array.isArray(value) ? (value as SavedAttachment[]) : [];
 }
+
+function JudgmentBlock({
+  label,
+  item,
+  tone = "default",
+}: {
+  label: string;
+  item: JudgmentItem;
+  tone?: "default" | "attention" | "avoid";
+}) {
+  return (
+    <article className={"judgment-block " + tone}>
+      <span className="judgment-label">{label}</span>
+      <strong>{item.text}</strong>
+      {item.evidence.length > 0 && (
+        <details className="judgment-evidence">
+          <summary>查看判断依据</summary>
+          <div>
+            {item.evidence.map((evidence, index) => (
+              <p key={evidence.source + index}>
+                <span
+                  className={
+                    evidence.kind === "hypothesis"
+                      ? "evidence-source hypothesis"
+                      : "evidence-source"
+                  }
+                >
+                  {evidence.source}
+                  {evidence.kind === "hypothesis" ? " · 待验证" : ""}
+                </span>
+                {evidence.text}
+              </p>
+            ))}
+          </div>
+        </details>
+      )}
+    </article>
+  );
+}
+
 
 function ProfileItem({
   label,
@@ -181,6 +221,53 @@ export default function CustomerDrawer({
                   {query.data.customer.pinned ? "取消置顶" : "人工置顶"}
                 </button>
               </div>
+
+              <section className="operating-judgment-card">
+                <div className="operating-judgment-head">
+                  <div>
+                    <p className="eyebrow">RELATIONSHIP MANAGER VIEW</p>
+                    <h3>客户经营判断</h3>
+                    <p>
+                      先回答“现在怎么理解这个客户、下一次怎么沟通”，再展开看完整档案。
+                      结论来自已确认状态、画像、工作项和最近沟通；待验证假设会单独标记。
+                    </p>
+                  </div>
+                  <span className="judgment-mode">即时规则判断</span>
+                </div>
+
+                <div className="judgment-grid">
+                  <JudgmentBlock
+                    label="现在处于什么状态？"
+                    item={query.data.operating_judgment.current_state}
+                  />
+                  <JudgmentBlock
+                    label="当前真正关心什么？"
+                    item={query.data.operating_judgment.core_concern}
+                  />
+                  <JudgmentBlock
+                    label="最大的决策障碍是什么？"
+                    item={query.data.operating_judgment.decision_barrier}
+                    tone="attention"
+                  />
+                  <JudgmentBlock
+                    label="下一次最该确认什么？"
+                    item={query.data.operating_judgment.next_confirmation}
+                    tone="attention"
+                  />
+                </div>
+
+                <div className="judgment-wide-row">
+                  <JudgmentBlock
+                    label="更合适的沟通方式"
+                    item={query.data.operating_judgment.communication_approach}
+                  />
+                  <JudgmentBlock
+                    label="当前应该避免什么？"
+                    item={query.data.operating_judgment.avoid_action}
+                    tone="avoid"
+                  />
+                </div>
+              </section>
 
               <section className="profile-card">
                 <div className="profile-grid">

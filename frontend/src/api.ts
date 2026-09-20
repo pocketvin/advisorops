@@ -178,6 +178,29 @@ export interface ChangeProposal {
   created_at: string;
 }
 
+export interface JudgmentEvidence {
+  source: string;
+  text: string;
+  kind: "confirmed" | "hypothesis" | string;
+  activity_id: number | null;
+}
+
+export interface JudgmentItem {
+  text: string;
+  evidence: JudgmentEvidence[];
+}
+
+export interface OperatingJudgment {
+  generated_at: string;
+  mode: "deterministic" | string;
+  current_state: JudgmentItem;
+  core_concern: JudgmentItem;
+  decision_barrier: JudgmentItem;
+  next_confirmation: JudgmentItem;
+  communication_approach: JudgmentItem;
+  avoid_action: JudgmentItem;
+}
+
 export interface CustomerDetail {
   customer: Customer;
   active_work_item: WorkItem | null;
@@ -190,6 +213,7 @@ export interface CustomerDetail {
     changed_at: string;
   }>;
   pending_proposals: ChangeProposal[];
+  operating_judgment: OperatingJudgment;
 }
 
 export interface CustomerListItem {

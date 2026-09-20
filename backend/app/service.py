@@ -9,6 +9,7 @@ from .ai_service import AIService, AI_MUTABLE_FIELDS
 from .attachments import image_data_urls, remove_attachment_urls, save_attachments
 from .context_pack import ContextPackService
 from .import_service import preview_csv_import, sample_csv, template_csv
+from .judgment import build_operating_judgment
 from .db import PathLike, connect, transaction
 from .priority import evaluate_discovery
 from .seed import ensure_seeded, reset_demo_data
@@ -311,18 +312,26 @@ class WorkbenchService:
             customer = repository.get_customer(conn, customer_id)
             if customer is None:
                 raise CustomerNotFoundError(customer_id)
+            active_work = repository.get_active_work_for_customer(
+                conn,
+                customer_id,
+            )
+            activities = repository.list_activities(conn, customer_id)
             return {
                 "customer": customer,
-                "active_work_item": repository.get_active_work_for_customer(
-                    conn,
-                    customer_id,
-                ),
-                "activities": repository.list_activities(conn, customer_id),
+                "active_work_item": active_work,
+                "activities": activities,
                 "field_changes": repository.list_audits(conn, customer_id),
                 "pending_proposals": repository.list_change_proposals(
                     conn,
                     customer_id=customer_id,
                     status="pending",
+                ),
+                "operating_judgment": build_operating_judgment(
+                    customer,
+                    activities=activities,
+                    active_work=active_work,
+                    now=self._now(),
                 ),
             }
 
