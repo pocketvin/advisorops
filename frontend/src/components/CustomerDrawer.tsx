@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api } from "../api";
+import { api, type SavedAttachment } from "../api";
 
 interface Props {
   customerId: string;
@@ -37,6 +37,13 @@ const intentLabels: Record<string, string> = {
 
 function listText(value: string[] | undefined): string {
   return value?.length ? value.join("、") : "未记录";
+}
+
+function activityAttachments(
+  metadata: Record<string, unknown> | undefined,
+): SavedAttachment[] {
+  const value = metadata?.attachments;
+  return Array.isArray(value) ? (value as SavedAttachment[]) : [];
 }
 
 function ProfileItem({
@@ -136,7 +143,7 @@ export default function CustomerDrawer({
   return (
     <div className="drawer-backdrop" role="presentation" onMouseDown={onClose}>
       <aside
-        className="drawer"
+        className="drawer drawer-customer-detail"
         aria-label="客户详情"
         onMouseDown={(event) => event.stopPropagation()}
       >
@@ -540,6 +547,21 @@ export default function CustomerDrawer({
                         <p>{activity.structured_summary || "暂无结构化摘要"}</p>
                         {activity.customer_feedback && (
                           <blockquote>{activity.customer_feedback}</blockquote>
+                        )}
+                        {activityAttachments(activity.metadata).length > 0 && (
+                          <div className="timeline-attachments">
+                            {activityAttachments(activity.metadata).map((attachment) => (
+                              <a
+                                key={attachment.id}
+                                href={attachment.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={attachment.name}
+                              >
+                                <img src={attachment.url} alt={attachment.name} />
+                              </a>
+                            ))}
+                          </div>
                         )}
                         {activity.raw_content && (
                           <details className="raw-record">

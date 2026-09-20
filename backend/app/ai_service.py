@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional, Sequence
 
 from . import repository
 from .ai_client import (
@@ -13,6 +13,7 @@ from .ai_client import (
     build_interaction_user_prompt,
     interaction_system_prompt,
 )
+from .attachments import image_data_urls
 from .db import PathLike, connect, transaction
 from .time_utils import to_iso, utc_now, validate_datetime_string
 
@@ -90,6 +91,7 @@ class AIService:
         customer_id: str,
         raw_content: str,
         channel: str,
+        attachments: Optional[Sequence[Mapping[str, Any]]] = None,
         now=None,
     ) -> Dict[str, Any]:
         current_time = now or utc_now()
@@ -111,6 +113,7 @@ class AIService:
                     ),
                     schema_name="interaction_extraction",
                     schema=INTERACTION_SCHEMA,
+                    images=image_data_urls(attachments or []),
                     max_completion_tokens=2400,
                 )
                 break
@@ -131,6 +134,7 @@ class AIService:
         customer_id: str,
         raw_content: str,
         channel: str,
+        attachments: Optional[Sequence[Mapping[str, Any]]] = None,
         now=None,
         source: str = "manual_interaction",
         activity_id: Optional[int] = None,
@@ -154,6 +158,7 @@ class AIService:
                     ),
                     schema_name="interaction_extraction",
                     schema=INTERACTION_SCHEMA,
+                    images=image_data_urls(attachments or []),
                     max_completion_tokens=2400,
                 )
                 break

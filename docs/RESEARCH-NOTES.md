@@ -244,3 +244,23 @@ reasoning_effort = low
 - 待验证经营假设：如决策风格，单独保存置信度和依据；
 - 软画像进入 AI 摘要和沟通准备，但不直接参与 Priority 打分；
 - 精确住址等非必要敏感信息不进入模拟数据。
+
+## 13. 图片 / 截图理解
+
+Kimi 官方 API 文档说明视觉模型支持 JPEG、PNG、WebP 图片，并可通过 URL / Base64 方式随消息输入；视觉能力覆盖图片文字识别、表格和图表理解等场景。
+
+参考：
+
+- https://platform.kimi.com/docs/guide/choose-kimi-model
+- https://platform.kimi.com/docs/guide/image-understanding
+- https://platform.kimi.com/docs/guide/overview
+
+本项目因此采用：
+
+- 记录进展支持最多 4 张 JPEG / PNG / WebP 图片；
+- 浏览器端对较大图片做尺寸压缩，减少上传和模型输入成本；
+- 图片与自然语言一起参与经营记录结构化；
+- 客户经理确认后才把附件落到本地 `work/attachments/`；
+- Activity 保存附件哈希、类型、尺寸和访问地址；
+- 图片不进入 Git；
+- 全局快速记录仍要求文字中明确客户姓名 / 客户编号，不让视觉模型猜客户身份。

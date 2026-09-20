@@ -1,6 +1,7 @@
+import os
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app.ai_client import KimiResult
@@ -16,6 +17,9 @@ NOW = datetime(2026, 9, 20, 6, 30, tzinfo=timezone.utc)
 class FakeKimiClient:
     configured = True
 
+    def __init__(self):
+        self.last_images = []
+
     def status(self):
         return {
             "configured": True,
@@ -25,6 +29,7 @@ class FakeKimiClient:
         }
 
     def json_schema(self, **kwargs):
+        self.last_images = list(kwargs.get("images") or [])
         schema_name = kwargs["schema_name"]
         if schema_name == "interaction_extraction":
             return KimiResult(
@@ -64,6 +69,10 @@ class V1FeatureTests(unittest.TestCase):
     def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory()
         self.db_path = Path(self.tempdir.name) / "v1.db"
+        self.previous_attachments_dir = os.environ.get("WORKBENCH_ATTACHMENTS_DIR")
+        os.environ["WORKBENCH_ATTACHMENTS_DIR"] = str(
+            Path(self.tempdir.name) / "attachments"
+        )
         self.service = WorkbenchService(
             db_path=self.db_path,
             clock=lambda: NOW,
@@ -79,6 +88,10 @@ class V1FeatureTests(unittest.TestCase):
         )
 
     def tearDown(self):
+        if self.previous_attachments_dir is None:
+            os.environ.pop("WORKBENCH_ATTACHMENTS_DIR", None)
+        else:
+            os.environ["WORKBENCH_ATTACHMENTS_DIR"] = self.previous_attachments_dir
         self.tempdir.cleanup()
 
     def test_seed_has_40_fixed_customers(self):
@@ -149,6 +162,78 @@ class V1FeatureTests(unittest.TestCase):
                 raw_content="张明远和周婷今天都联系过了。",
                 channel="phone",
             )
+
+    def test_quick_record_passes_image_to_vision_model(self):
+        tiny_png = (
+            "data:image/png;base64,"
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl7fHIAAAAASUVORK5CYII="
+        )
+        prepared = self.service.quick_record_prepare(
+            raw_content="周婷刚刚发来聊天截图。",
+            channel="wecom",
+            attachments=[
+                {
+                    "name": "chat.png",
+                    "mime_type": "image/png",
+                    "data_url": tiny_png,
+                }
+            ],
+        )
+        self.assertTrue(prepared["ai_ready"])
+        self.assertEqual(len(self.fake_ai.client.last_images), 1)
+
+    def test_record_interaction_persists_attachment_metadata_and_file(self):
+        tiny_png = (
+            "data:image/png;base64,"
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl7fHIAAAAASUVORK5CYII="
+        )
+        work = self.service.start_work("C001")
+        self.service.record_interaction(
+            work["id"],
+            {
+                "raw_content": "客户发来截图并补充说明。",
+                "structured_summary": "客户通过截图补充了本次沟通信息。",
+                "customer_feedback": "",
+                "action_taken": "记录图片沟通",
+                "relationship_stage": "considering",
+                "intent_level": "medium",
+                "current_need": "继续确认后续安排",
+                "current_obstacle": "",
+                "next_step": "按约定继续沟通",
+                "next_contact_at": None,
+                "channel": "wecom",
+                "outcome": "completed",
+                "waiting_on": "none",
+                "attachments": [
+                    {
+                        "name": "chat.png",
+                        "mime_type": "image/png",
+                        "data_url": tiny_png,
+                    }
+                ],
+            },
+        )
+        detail = self.service.customer_detail("C001")
+        interaction = next(
+            item for item in detail["activities"] if item["activity_type"] == "interaction"
+        )
+        saved = interaction["metadata"]["attachments"]
+        self.assertEqual(len(saved), 1)
+        self.assertTrue(saved[0]["url"].startswith("/attachments/"))
+        self.assertEqual(
+            len(list((Path(self.tempdir.name) / "attachments").glob("*.png"))),
+            1,
+        )
+
+    def test_defer_supports_specific_follow_up_time(self):
+        target = NOW + timedelta(days=2, hours=3)
+        updated = self.service.defer_customer(
+            "C002",
+            days=None,
+            next_contact_at=target.isoformat(),
+        )
+        self.assertEqual(updated["next_contact_at"], target.isoformat().replace("+00:00", "Z"))
+        self.assertIn("重新跟进", updated["next_step"])
 
     def test_demo_time_advance_releases_scheduled_customer(self):
         before = {

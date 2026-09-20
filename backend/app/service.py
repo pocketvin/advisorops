@@ -6,12 +6,13 @@ from typing import Any, Callable, Dict, Mapping, Optional, Sequence
 from . import repository
 from .ai_client import KimiError
 from .ai_service import AIService, AI_MUTABLE_FIELDS
+from .attachments import image_data_urls, save_attachments
 from .context_pack import ContextPackService
 from .db import PathLike, connect, transaction
 from .priority import evaluate_discovery
 from .seed import ensure_seeded, reset_demo_data
 from .sync_service import SyncService
-from .time_utils import business_day_window, to_iso, utc_now
+from .time_utils import BUSINESS_TZ, business_day_window, parse_datetime, to_iso, utc_now
 
 
 class CustomerNotFoundError(KeyError):
@@ -214,6 +215,7 @@ class WorkbenchService:
         *,
         raw_content: str,
         channel: str,
+        attachments: Optional[Sequence[Mapping[str, Any]]] = None,
     ) -> Dict[str, Any]:
         content = raw_content.strip()
         if not content:
@@ -243,6 +245,7 @@ class WorkbenchService:
                 customer_id=customer["customer_id"],
                 raw_content=content,
                 channel=channel,
+                attachments=attachments or [],
                 now=self._now(),
             )
             return {
@@ -257,7 +260,7 @@ class WorkbenchService:
                 "ai_ready": False,
                 "warning": "智能整理暂不可用，已识别客户；可以手工补全后直接保存。",
                 "suggested_interaction": {
-                    "structured_summary": "",
+                    "structured_summary": content,
                     "customer_feedback": "",
                     "relationship_stage": customer["relationship_stage"],
                     "intent_level": customer["intent_level"],
@@ -405,11 +408,34 @@ class WorkbenchService:
             assert updated is not None
             return updated
 
-    def defer_customer(self, customer_id: str, days: int = 3) -> Dict[str, Any]:
+    def defer_customer(
+        self,
+        customer_id: str,
+        days: Optional[int] = 3,
+        next_contact_at: Optional[str] = None,
+    ) -> Dict[str, Any]:
         now = self._now()
         now_iso = to_iso(now) or ""
-        days = max(1, min(days, 90))
-        next_contact = to_iso(now + timedelta(days=days))
+
+        if next_contact_at:
+            parsed = parse_datetime(next_contact_at)
+            if parsed is None:
+                raise ValueError("稍后跟进时间格式无效")
+            if parsed <= now:
+                raise ValueError("稍后跟进时间必须晚于当前时间")
+            if parsed > now + timedelta(days=90):
+                raise ValueError("稍后跟进时间最多设置到 90 天后")
+            next_contact = to_iso(parsed)
+            local = parsed.astimezone(BUSINESS_TZ)
+            defer_label = local.strftime("%m月%d日 %H:%M")
+            next_step = f"{defer_label} 重新跟进"
+            metadata = {"defer_until": next_contact}
+        else:
+            selected_days = max(1, min(int(days or 3), 90))
+            next_contact = to_iso(now + timedelta(days=selected_days))
+            defer_label = f"{selected_days} 天后"
+            next_step = f"{defer_label}重新跟进"
+            metadata = {"defer_days": selected_days, "defer_until": next_contact}
         with transaction(self.db_path) as conn:
             customer = repository.get_customer(conn, customer_id)
             if customer is None:
@@ -421,7 +447,7 @@ class WorkbenchService:
                 customer_id,
                 {
                     "next_contact_at": next_contact,
-                    "next_step": f"{days} 天后重新查看",
+                    "next_step": next_step,
                     "recent_signal": "",
                     "pinned": False,
                     "updated_at": now_iso,
@@ -436,14 +462,14 @@ class WorkbenchService:
                     "activity_type": "state_change",
                     "occurred_at": now_iso,
                     "raw_content": "",
-                    "structured_summary": f"客户经理暂缓处理，{days} 天后重新查看。",
+                    "structured_summary": f"客户经理暂缓处理，计划在{defer_label}重新跟进。",
                     "customer_feedback": "",
                     "action_taken": "暂缓",
-                    "next_step": f"{days} 天后重新查看",
+                    "next_step": next_step,
                     "next_contact_at": next_contact,
                     "stage_after": customer.get("relationship_stage"),
                     "intent_after": customer.get("intent_level"),
-                    "metadata": {"defer_days": days},
+                    "metadata": metadata,
                     "created_at": now_iso,
                 },
             )
@@ -457,12 +483,14 @@ class WorkbenchService:
         *,
         raw_content: str,
         channel: str,
+        attachments: Optional[Sequence[Mapping[str, Any]]] = None,
     ) -> Dict[str, Any]:
         try:
             return self.ai.extract_interaction(
                 customer_id=customer_id,
                 raw_content=raw_content,
                 channel=channel,
+                attachments=attachments or [],
                 now=self._now(),
             )
         except KeyError as exc:
@@ -531,6 +559,7 @@ class WorkbenchService:
             stage = str(payload.get("relationship_stage") or customer["relationship_stage"])
             intent = str(payload.get("intent_level") or customer["intent_level"])
             raw_content = str(payload.get("raw_content") or "").strip()
+            attachment_payloads = list(payload.get("attachments") or [])
             summary = str(payload.get("structured_summary") or "").strip()
             feedback = str(payload.get("customer_feedback") or "").strip()
             next_step = str(payload.get("next_step") or "").strip()
@@ -548,14 +577,16 @@ class WorkbenchService:
             outcome = str(payload.get("outcome") or "completed")
             waiting_on = str(payload.get("waiting_on") or "none")
 
-            if not raw_content:
-                raise ValueError("必须保留本次沟通的原始记录")
+            if not raw_content and not attachment_payloads:
+                raise ValueError("必须保留本次沟通文字或至少一张图片")
             if not summary:
                 raise ValueError("必须确认本次沟通的结构化摘要")
             if outcome not in {"completed", "waiting"}:
                 raise ValueError("outcome 必须为 completed 或 waiting")
             if outcome == "waiting" and waiting_on == "none":
                 raise ValueError("等待中必须说明 waiting_on")
+
+            stored_attachments = save_attachments(attachment_payloads)
 
             cooldown_until = customer.get("cooldown_until")
             pinned = customer.get("pinned")
@@ -588,6 +619,7 @@ class WorkbenchService:
                     "metadata": {
                         "confirmation_mode": "human_confirmed",
                         "ai_proposal_id": proposal["id"] if proposal else None,
+                        "attachments": stored_attachments,
                     },
                     "created_at": now_iso,
                 },

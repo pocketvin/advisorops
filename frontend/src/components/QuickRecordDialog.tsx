@@ -3,11 +3,13 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import {
   api,
+  type ImageAttachmentInput,
   type IntentLevel,
   type InteractionPayload,
   type QuickRecordPreparation,
   type RelationshipStage,
 } from "../api";
+import ImageAttachmentPicker from "./ImageAttachmentPicker";
 
 interface Props {
   onClose: () => void;
@@ -51,26 +53,18 @@ function toIso(value: string): string | null {
   return new Date(value).toISOString();
 }
 
-function futureLocalInput(days: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  const pad = (number: number) => String(number).padStart(2, "0");
-  return [
-    date.getFullYear(),
-    "-",
-    pad(date.getMonth() + 1),
-    "-",
-    pad(date.getDate()),
-    "T",
-    pad(date.getHours()),
-    ":",
-    pad(date.getMinutes()),
-  ].join("");
+function stageLabel(value: RelationshipStage): string {
+  return stageOptions.find(([key]) => key === value)?.[1] ?? value;
+}
+
+function intentLabel(value: IntentLevel): string {
+  return intentOptions.find(([key]) => key === value)?.[1] ?? value;
 }
 
 export default function QuickRecordDialog({ onClose }: Props) {
   const queryClient = useQueryClient();
   const [rawContent, setRawContent] = useState("");
+  const [attachments, setAttachments] = useState<ImageAttachmentInput[]>([]);
   const [channel, setChannel] =
     useState<InteractionPayload["channel"]>("phone");
   const [prepared, setPrepared] = useState<QuickRecordPreparation | null>(null);
@@ -90,7 +84,7 @@ export default function QuickRecordDialog({ onClose }: Props) {
   const [waitingOn, setWaitingOn] =
     useState<InteractionPayload["waiting_on"]>("none");
 
-  function clearPrepared() {
+  function invalidatePrepared() {
     setPrepared(null);
   }
 
@@ -99,11 +93,16 @@ export default function QuickRecordDialog({ onClose }: Props) {
       api.quickRecordPrepare({
         raw_content: rawContent,
         channel,
+        attachments,
       }),
     onSuccess: (result) => {
       const suggestion = result.suggested_interaction;
       setPrepared(result);
-      setSummary(suggestion.structured_summary);
+      setSummary(
+        suggestion.structured_summary ||
+          rawContent.trim() ||
+          "本次沟通包含图片附件。",
+      );
       setFeedback(suggestion.customer_feedback);
       setStage(suggestion.relationship_stage);
       setIntent(suggestion.intent_level);
@@ -138,8 +137,6 @@ export default function QuickRecordDialog({ onClose }: Props) {
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!prepared) return;
-    if (outcome === "waiting" && waitingOn === "none") return;
-
     saveMutation.mutate({
       raw_content: rawContent,
       structured_summary: summary,
@@ -155,13 +152,16 @@ export default function QuickRecordDialog({ onClose }: Props) {
       channel,
       outcome,
       waiting_on: outcome === "waiting" ? waitingOn : "none",
+      attachments,
     });
   }
+
+  const canPrepare = rawContent.trim().length > 0;
 
   return (
     <div className="quick-record-backdrop" role="presentation" onMouseDown={onClose}>
       <section
-        className="quick-record-dialog"
+        className="quick-record-dialog quick-record-dialog-simple"
         role="dialog"
         aria-modal="true"
         aria-label="全局记录客户进展"
@@ -169,11 +169,11 @@ export default function QuickRecordDialog({ onClose }: Props) {
       >
         <header className="quick-record-header">
           <div>
-            <p className="eyebrow">GLOBAL QUICK RECORD</p>
-            <h2>记录客户进展</h2>
+            <p className="eyebrow">QUICK RECORD</p>
+            <h2>记录进展</h2>
             <p>
-              直接写“周婷刚刚……”即可。系统先确定客户，再整理本次进展；
-              不需要先进入客户详情。
+              直接写“周婷刚刚……”并可附聊天截图。系统先确认客户，再帮你整理；
+              默认不需要填业务表格。
             </p>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="关闭">
@@ -182,32 +182,34 @@ export default function QuickRecordDialog({ onClose }: Props) {
         </header>
 
         <form className="quick-record-body" onSubmit={submit}>
-          <section className="quick-record-input-card">
-            <label className="field quick-record-main-field">
-              <span>发生了什么</span>
-              <textarea
-                autoFocus
-                required
-                rows={5}
-                value={rawContent}
-                onChange={(event) => {
-                  setRawContent(event.target.value);
-                  clearPrepared();
-                }}
-                placeholder="例如：周婷刚刚电话说资料已经看过了，明天下午回复我。"
-              />
-            </label>
+          <section className="conversation-capture">
+            <textarea
+              autoFocus
+              rows={5}
+              value={rawContent}
+              onChange={(event) => {
+                setRawContent(event.target.value);
+                invalidatePrepared();
+              }}
+              placeholder="例如：周婷刚刚电话说资料看过了，今晚和家里人商量，明天下午回复我。"
+            />
 
-            <div className="quick-record-input-actions">
-              <label className="field inline-field">
-                <span>渠道</span>
+            <div className="conversation-toolbar">
+              <ImageAttachmentPicker
+                attachments={attachments}
+                onChange={(value) => {
+                  setAttachments(value);
+                  invalidatePrepared();
+                }}
+              />
+              <div className="conversation-actions">
                 <select
                   value={channel}
                   onChange={(event) => {
                     setChannel(
                       event.target.value as InteractionPayload["channel"],
                     );
-                    clearPrepared();
+                    invalidatePrepared();
                   }}
                 >
                   <option value="phone">电话</option>
@@ -216,75 +218,90 @@ export default function QuickRecordDialog({ onClose }: Props) {
                   <option value="app">App</option>
                   <option value="other">其他</option>
                 </select>
-              </label>
-              <button
-                type="button"
-                className="button primary"
-                disabled={!rawContent.trim() || prepareMutation.isPending}
-                onClick={() => prepareMutation.mutate()}
-              >
-                {prepareMutation.isPending ? "正在识别并整理…" : "识别客户并整理"}
-              </button>
+                <button
+                  type="button"
+                  className="button primary"
+                  disabled={!canPrepare || prepareMutation.isPending}
+                  onClick={() => prepareMutation.mutate()}
+                >
+                  {prepareMutation.isPending ? "正在整理…" : "智能整理"}
+                </button>
+              </div>
             </div>
 
             {prepareMutation.error && (
-              <div className="error-banner">
-                {prepareMutation.error.message}
-              </div>
+              <div className="error-banner">{prepareMutation.error.message}</div>
             )}
           </section>
 
           {prepared && (
             <>
-              <section className="quick-record-match">
-                <div>
-                  <span>已识别客户</span>
-                  <strong>{prepared.customer.name}</strong>
-                  <small>
-                    {prepared.customer.customer_id} · 服务层级{" "}
-                    {prepared.customer.customer_level} ·{" "}
-                    {prepared.customer.risk_level}
-                  </small>
+              <section className="record-review-card">
+                <div className="record-review-head">
+                  <div>
+                    <span>已识别客户</span>
+                    <strong>{prepared.customer.name}</strong>
+                    <small>
+                      {prepared.customer.customer_id} · 服务{" "}
+                      {prepared.customer.customer_level}
+                    </small>
+                  </div>
+                  <span className="review-ready">
+                    {prepared.ai_ready ? "已整理，等待确认" : "已识别客户"}
+                  </span>
                 </div>
-                <div className="quick-record-ai-status">
-                  {prepared.ai_ready ? (
-                    <>
-                      <strong>智能整理完成</strong>
-                      <span>
-                        候选结果仅用于预填，确认保存后才会改变客户状态。
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <strong>已识别客户</strong>
-                      <span>{prepared.warning}</span>
-                    </>
-                  )}
+
+                {prepared.warning && (
+                  <div className="warning-banner">{prepared.warning}</div>
+                )}
+
+                <div className="record-review-summary">
+                  <span>本次进展</span>
+                  <p>{summary || "尚未生成摘要"}</p>
+                  {feedback && <blockquote>{feedback}</blockquote>}
+                </div>
+
+                <div className="review-facts">
+                  <div>
+                    <span>状态</span>
+                    <strong>{stageLabel(stage)} · {intentLabel(intent)}意向</strong>
+                  </div>
+                  <div>
+                    <span>下一步</span>
+                    <strong>{nextStep || "暂无明确下一步"}</strong>
+                  </div>
+                  <div>
+                    <span>时间</span>
+                    <strong>
+                      {nextContact
+                        ? new Date(nextContact).toLocaleString("zh-CN", {
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "未设置"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>本次结果</span>
+                    <strong>{outcome === "waiting" ? "继续等待" : "本次完成"}</strong>
+                  </div>
                 </div>
               </section>
 
-              <div className="quick-record-grid">
-                <section className="quick-record-panel">
-                  <div className="section-heading">
-                    <span>01</span>
-                    <div>
-                      <h3>本次记录</h3>
-                      <p>原话完整保留，结构化信息可以继续修改。</p>
-                    </div>
-                  </div>
-
-                  <label className="field">
+              <details className="advanced-record-editor">
+                <summary>识别不准确？展开修改详细字段</summary>
+                <div className="advanced-record-grid">
+                  <label className="field wide">
                     <span>结构化摘要</span>
                     <textarea
-                      required
                       rows={3}
                       value={summary}
                       onChange={(event) => setSummary(event.target.value)}
-                      placeholder="确认这次到底发生了什么。"
                     />
                   </label>
-
-                  <label className="field">
+                  <label className="field wide">
                     <span>客户反馈</span>
                     <textarea
                       rows={2}
@@ -292,66 +309,43 @@ export default function QuickRecordDialog({ onClose }: Props) {
                       onChange={(event) => setFeedback(event.target.value)}
                     />
                   </label>
-
-                  <div className="field-grid">
-                    <label className="field">
-                      <span>关系阶段</span>
-                      <select
-                        value={stage}
-                        onChange={(event) =>
-                          setStage(event.target.value as RelationshipStage)
-                        }
-                      >
-                        {stageOptions.map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="field">
-                      <span>当前意向</span>
-                      <select
-                        value={intent}
-                        onChange={(event) =>
-                          setIntent(event.target.value as IntentLevel)
-                        }
-                      >
-                        {intentOptions.map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-
                   <label className="field">
-                    <span>当前需求</span>
-                    <input
-                      value={need}
-                      onChange={(event) => setNeed(event.target.value)}
-                    />
+                    <span>关系阶段</span>
+                    <select
+                      value={stage}
+                      onChange={(event) =>
+                        setStage(event.target.value as RelationshipStage)
+                      }
+                    >
+                      {stageOptions.map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
                   </label>
-
                   <label className="field">
+                    <span>当前意向</span>
+                    <select
+                      value={intent}
+                      onChange={(event) =>
+                        setIntent(event.target.value as IntentLevel)
+                      }
+                    >
+                      {intentOptions.map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field wide">
+                    <span>当前需求</span>
+                    <input value={need} onChange={(event) => setNeed(event.target.value)} />
+                  </label>
+                  <label className="field wide">
                     <span>当前障碍</span>
                     <input
                       value={obstacle}
                       onChange={(event) => setObstacle(event.target.value)}
                     />
                   </label>
-                </section>
-
-                <section className="quick-record-panel">
-                  <div className="section-heading">
-                    <span>02</span>
-                    <div>
-                      <h3>下一步</h3>
-                      <p>确认后直接写入档案和工作流。</p>
-                    </div>
-                  </div>
-
                   <label className="field">
                     <span>本次动作</span>
                     <input
@@ -359,83 +353,41 @@ export default function QuickRecordDialog({ onClose }: Props) {
                       onChange={(event) => setActionTaken(event.target.value)}
                     />
                   </label>
-
                   <label className="field">
-                    <span>下一步动作</span>
-                    <input
-                      value={nextStep}
-                      onChange={(event) => setNextStep(event.target.value)}
-                    />
-                  </label>
-
-                  <label className="field">
-                    <span>下次检查 / 联系时间</span>
+                    <span>下次联系时间</span>
                     <input
                       type="datetime-local"
                       value={nextContact}
                       onChange={(event) => setNextContact(event.target.value)}
                     />
                   </label>
-
-                  <label className="field">
+                  <label className="field wide">
+                    <span>下一步动作</span>
+                    <input
+                      value={nextStep}
+                      onChange={(event) => setNextStep(event.target.value)}
+                    />
+                  </label>
+                  <label className="field wide">
                     <span>客户经理备注</span>
                     <textarea
                       rows={2}
                       value={managerNote}
                       onChange={(event) => setManagerNote(event.target.value)}
-                      placeholder="只写需要长期保留的补充信息。"
                     />
                   </label>
 
-                  <div className="quick-action-row">
+                  <div className="advanced-outcome wide">
                     <button
                       type="button"
-                      className="quick-action reject"
-                      onClick={() => {
-                        setStage("rejected");
-                        setIntent("low");
-                        setOutcome("completed");
-                        setWaitingOn("none");
-                        setNextStep("");
-                        setNextContact("");
-                        if (!summary.trim()) {
-                          setSummary("客户明确表示近期暂无需求，本次主动跟进结束。");
-                        }
-                      }}
-                    >
-                      明确拒绝
-                    </button>
-                    <button
-                      type="button"
-                      className="quick-action"
-                      onClick={() => {
-                        setStage("considering");
-                        if (intent === "unknown" || intent === "low") {
-                          setIntent("medium");
-                        }
-                        setOutcome("completed");
-                        setWaitingOn("none");
-                        setNextStep("三天后按约定回访");
-                        setNextContact(futureLocalInput(3));
-                      }}
-                    >
-                      再考虑 3 天
-                    </button>
-                  </div>
-
-                  <div className="choice-row">
-                    <button
-                      type="button"
-                      className={
-                        outcome === "completed" ? "choice active" : "choice"
-                      }
+                      className={outcome === "completed" ? "choice active" : "choice"}
                       onClick={() => {
                         setOutcome("completed");
                         setWaitingOn("none");
                       }}
                     >
                       <strong>本次已完成</strong>
-                      <span>后续按新的时间再次进入发现区</span>
+                      <span>退出当前工作项</span>
                     </button>
                     <button
                       type="button"
@@ -451,7 +403,7 @@ export default function QuickRecordDialog({ onClose }: Props) {
                   </div>
 
                   {outcome === "waiting" && (
-                    <label className="field">
+                    <label className="field wide">
                       <span>当前在等谁 / 什么</span>
                       <select
                         value={waitingOn}
@@ -468,8 +420,8 @@ export default function QuickRecordDialog({ onClose }: Props) {
                       </select>
                     </label>
                   )}
-                </section>
-              </div>
+                </div>
+              </details>
 
               {saveMutation.error && (
                 <div className="error-banner">{saveMutation.error.message}</div>
@@ -481,7 +433,7 @@ export default function QuickRecordDialog({ onClose }: Props) {
             <span>
               {prepared
                 ? "将记录到：" + prepared.customer.name
-                : "先写明客户姓名或客户编号。"}
+                : "请在文字中写明客户姓名或编号。"}
             </span>
             <div>
               <button type="button" className="button secondary" onClick={onClose}>
@@ -490,12 +442,7 @@ export default function QuickRecordDialog({ onClose }: Props) {
               <button
                 type="submit"
                 className="button primary"
-                disabled={
-                  !prepared ||
-                  !summary.trim() ||
-                  saveMutation.isPending ||
-                  (outcome === "waiting" && waitingOn === "none")
-                }
+                disabled={!prepared || !summary.trim() || saveMutation.isPending}
               >
                 {saveMutation.isPending ? "正在记录…" : "确认记录"}
               </button>

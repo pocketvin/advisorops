@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, type DiscoveryItem, type WorkItem } from "../api";
+import DeferDialog from "./DeferDialog";
 
 interface Props {
   onOpenCustomer: (customerId: string) => void;
@@ -197,7 +198,7 @@ function DiscoveryCard({
               onClick={onDefer}
               disabled={deferring}
             >
-              {deferring ? "正在暂缓…" : "3 天后再看"}
+              {deferring ? "正在设置…" : "稍后跟进"}
             </button>
             <button
               className="button primary"
@@ -215,19 +216,24 @@ function DiscoveryCard({
 
 export default function WorkbenchView({ onOpenCustomer, onRecordWork }: Props) {
   const queryClient = useQueryClient();
+  const [deferTarget, setDeferTarget] = useState<{ customerId: string; name: string } | null>(null);
   const workbenchQuery = useQuery({
     queryKey: ["workbench"],
     queryFn: api.workbench,
   });
 
   const deferMutation = useMutation({
-    mutationFn: (customerId: string) => api.deferCustomer(customerId, 3),
-    onSuccess: async (_, customerId) => {
+    mutationFn: ({ customerId, payload }: {
+      customerId: string;
+      payload: { days?: number; next_contact_at?: string };
+    }) => api.deferCustomer(customerId, payload),
+    onSuccess: async (_, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["workbench"] }),
         queryClient.invalidateQueries({ queryKey: ["customers"] }),
-        queryClient.invalidateQueries({ queryKey: ["customer", customerId] }),
+        queryClient.invalidateQueries({ queryKey: ["customer", variables.customerId] }),
       ]);
+      setDeferTarget(null);
     },
   });
 
@@ -409,11 +415,16 @@ export default function WorkbenchView({ onOpenCustomer, onRecordWork }: Props) {
               }
               deferring={
                 deferMutation.isPending &&
-                deferMutation.variables === item.customer.customer_id
+                deferMutation.variables?.customerId === item.customer.customer_id
               }
               onDetail={() => onOpenCustomer(item.customer.customer_id)}
               onStart={() => startMutation.mutate(item.customer.customer_id)}
-              onDefer={() => deferMutation.mutate(item.customer.customer_id)}
+              onDefer={() =>
+                setDeferTarget({
+                  customerId: item.customer.customer_id,
+                  name: item.customer.name,
+                })
+              }
             />
           ))}
 
@@ -428,6 +439,21 @@ export default function WorkbenchView({ onOpenCustomer, onRecordWork }: Props) {
           <div className="error-banner">{startMutation.error.message}</div>
         )}
       </section>
+
+      {deferTarget && (
+        <DeferDialog
+          customerName={deferTarget.name}
+          baseTime={data?.demo_time}
+          pending={deferMutation.isPending}
+          onClose={() => setDeferTarget(null)}
+          onConfirm={(payload) =>
+            deferMutation.mutate({
+              customerId: deferTarget.customerId,
+              payload,
+            })
+          }
+        />
+      )}
     </>
   );
 }

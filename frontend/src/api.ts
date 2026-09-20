@@ -198,6 +198,21 @@ export interface CustomerListItem {
   discovery: Discovery | null;
 }
 
+export interface ImageAttachmentInput {
+  name: string;
+  mime_type: "image/jpeg" | "image/png" | "image/webp";
+  data_url: string;
+}
+
+export interface SavedAttachment {
+  id: string;
+  name: string;
+  mime_type: string;
+  size: number;
+  url: string;
+  sha256: string;
+}
+
 export interface InteractionPayload {
   raw_content: string;
   structured_summary: string;
@@ -214,6 +229,7 @@ export interface InteractionPayload {
   outcome: "completed" | "waiting";
   waiting_on: "none" | "customer" | "manager" | "internal" | "scheduled_time";
   proposal_id?: number | null;
+  attachments?: ImageAttachmentInput[];
 }
 
 export interface AIExtraction {
@@ -350,6 +366,7 @@ export const api = {
   quickRecordPrepare: (payload: {
     raw_content: string;
     channel: InteractionPayload["channel"];
+    attachments?: ImageAttachmentInput[];
   }) =>
     request<QuickRecordPreparation>("/api/quick-record/prepare", {
       method: "POST",
@@ -367,10 +384,13 @@ export const api = {
       body: JSON.stringify({ pinned }),
     }),
 
-  deferCustomer: (customerId: string, days = 3) =>
+  deferCustomer: (
+    customerId: string,
+    payload: { days?: number; next_contact_at?: string | null },
+  ) =>
     request<Customer>(`/api/customers/${customerId}/defer`, {
       method: "POST",
-      body: JSON.stringify({ days }),
+      body: JSON.stringify(payload),
     }),
 
   startWork: (customerId: string) =>
@@ -380,7 +400,11 @@ export const api = {
 
   aiExtract: (
     customerId: string,
-    payload: { raw_content: string; channel: InteractionPayload["channel"] },
+    payload: {
+      raw_content: string;
+      channel: InteractionPayload["channel"];
+      attachments?: ImageAttachmentInput[];
+    },
   ) =>
     request<AIExtraction>(`/api/customers/${customerId}/ai/extract`, {
       method: "POST",

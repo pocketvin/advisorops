@@ -111,8 +111,11 @@ V1 **不加入 APScheduler**。原因：求职 Demo 并不需要持续后台服�
 - Field Change Audit
 - pending AI Proposal
 - 人工置顶
-- 3 天后再看
+- 稍后跟进（预设时间 + 自定义时间）
 - 任意客户手工记录动态
+- 对话式记录进展：文字 + 图片 → 智能整理 → 结果卡确认
+- 详细结构化字段仅在需要纠正时展开
+- 图片附件本地保存并进入 Activity Timeline
 - 明确拒绝 / 再考虑快捷模板
 - Reset Demo
 - Demo Clock

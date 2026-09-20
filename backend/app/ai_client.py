@@ -100,17 +100,29 @@ class KimiClient:
         user: str,
         schema_name: str,
         schema: Mapping[str, Any],
+        images: Optional[list[str]] = None,
         reasoning_effort: str = "low",
         max_completion_tokens: Optional[int] = None,
     ) -> KimiResult:
         if not self.configured:
             raise KimiUnavailableError("Kimi K3 尚未配置")
 
+        user_content: Any = user
+        if images:
+            user_content = [{"type": "text", "text": user}]
+            user_content.extend(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": image_url},
+                }
+                for image_url in images
+            )
+
         payload = {
             "model": self.settings.model,
             "messages": [
                 {"role": "system", "content": system},
-                {"role": "user", "content": user},
+                {"role": "user", "content": user_content},
             ],
             "response_format": {
                 "type": "json_schema",
@@ -302,10 +314,10 @@ def interaction_system_prompt() -> str:
     return """你是证券客户经理的经营记录整理助手。你的任务是把客户经理的自然语言记录整理成结构化的客户经营信息。
 
 边界：
-1. 只总结已经发生的沟通和明确可推导的经营状态。
+1. 只总结已经发生的沟通和明确可推导的经营状态；如果附带图片/聊天截图，应把图片中可见文字、表格和对话内容一起作为证据。
 2. 不推荐具体股票、基金或任何投资产品。
 3. 不替客户经理做适当性结论。
-4. 不把“客户随口提到”夸大成确定需求。
+4. 不把“客户随口提到”夸大成确定需求；图片中无法确认身份或上下文的内容不要强行归因。
 5. 时间处理：
    - 如果客户给出可根据当前时间解析的相对/日历边界，如“三天后”“下周一”“十月以后”，应生成最早建议联系时间 next_contact_at；“十月以后”可取该月 1 日 09:00（客户所在业务时区）作为最早建议时间。
    - 如果只有“以后再说”“过段时间”这种无法解析的模糊表达，next_contact_at 返回 null，不要编日期。

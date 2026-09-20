@@ -1,7 +1,9 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .ai_client import KimiError, KimiUnavailableError
+from .attachments import attachments_dir
 from .schemas import (
     AIExtractRequest,
     ContextPackRequest,
@@ -32,6 +34,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+app.mount(
+    "/attachments",
+    StaticFiles(directory=str(attachments_dir()), check_dir=False),
+    name="attachments",
 )
 
 service = WorkbenchService()
@@ -112,6 +120,7 @@ def quick_record_prepare(payload: QuickRecordPrepareRequest):
         return service.quick_record_prepare(
             raw_content=payload.raw_content,
             channel=payload.channel,
+            attachments=[item.model_dump() for item in payload.attachments],
         )
     except Exception as exc:
         raise _http_error(exc)
@@ -136,7 +145,11 @@ def pin_customer(customer_id: str, payload: PinRequest):
 @app.post("/api/customers/{customer_id}/defer")
 def defer_customer(customer_id: str, payload: DeferRequest):
     try:
-        return service.defer_customer(customer_id, payload.days)
+        return service.defer_customer(
+            customer_id,
+            days=payload.days,
+            next_contact_at=payload.next_contact_at,
+        )
     except Exception as exc:
         raise _http_error(exc)
 
@@ -156,6 +169,7 @@ def ai_extract(customer_id: str, payload: AIExtractRequest):
             customer_id,
             raw_content=payload.raw_content,
             channel=payload.channel,
+            attachments=[item.model_dump() for item in payload.attachments],
         )
     except Exception as exc:
         raise _http_error(exc)
