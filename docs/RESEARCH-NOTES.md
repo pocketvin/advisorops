@@ -71,18 +71,23 @@ APScheduler 支持 interval / cron 等调度。
 
 > V1 可以在单实例 Demo 中使用，但不要把它包装成真实券商生产级调度方案。
 
-## 5. FastAPI + SQLModel + SQLite
+## 5. FastAPI + SQLite 数据访问
 
-FastAPI 官方 SQL 教程直接使用 SQLModel，并说明 SQLModel 建在 SQLAlchemy 和 Pydantic 之上，可支持 SQLite，也可迁移 PostgreSQL 等数据库。
+调研过 SQLModel：FastAPI 官方 SQL 教程使用 SQLModel，它建立在 SQLAlchemy 和 Pydantic 之上，也支持从 SQLite 走向 PostgreSQL。
 
 参考：
 
 - https://fastapi.tiangolo.com/tutorial/sql-databases/
 - https://sqlmodel.tiangolo.com/
 
-结论：
+当前 V1 最终选择仍是 Python 标准库 `sqlite3` + 薄 Repository，原因是：
 
-> 正式实现从当前 raw sqlite3 scaffold 收敛到 SQLModel，减少手工映射代码，同时保留 SQLite 的轻量性。
+- 当前只有少量表和明确查询，已有 SQL 很直接
+- 不为 ORM 本身增加依赖和迁移成本
+- Service 与 SQL 已通过 Repository 隔离
+- 未来需要 PostgreSQL / Alembic 时再迁移，不影响上层工作流
+
+SQLModel 保留为后续候选，而不是 V1 强制依赖。
 
 ## 6. SQLite WAL
 

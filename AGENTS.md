@@ -2,9 +2,9 @@
 
 ## Current phase
 
-This project is currently in product/architecture planning. Do not expand the existing prototype implementation until the core docs under `docs/` are consistent and the user explicitly asks to start implementation.
+This project is currently implementing Phase 1: the smallest complete discovery → work area → interaction → completion loop.
 
-The existing backend/frontend code is an early scaffold, not the architecture source of truth.
+The docs under `docs/` remain the architecture source of truth. Phase 1 code must stay inside the approved scope: fixed simulated customers, deterministic discovery rules, complete Activity history, WorkItem state, and human-confirmed interaction updates. Do not jump ahead to real connectors or AI extraction unless the user explicitly advances the phase.
 
 ## Product goal
 
@@ -43,7 +43,7 @@ AI must not silently overwrite authority-owned customer facts.
 - Frontend: React + TypeScript + Vite.
 - Server state: TanStack Query.
 - Backend: Python + FastAPI.
-- Models/data access: SQLModel.
+- Models/data access: Python sqlite3 + a thin repository layer for V1.
 - Data: SQLite with WAL for V1.
 - Tests: pytest plus frontend unit/component tests when implementation begins.
 - Keep rule logic framework-independent and unit-testable.

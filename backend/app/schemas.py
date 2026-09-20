@@ -3,35 +3,30 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
-Stage = Literal["new", "contacted", "interested", "considering", "rejected", "dormant"]
-Intent = Literal["unknown", "low", "medium", "high"]
+RelationshipStage = Literal[
+    "new",
+    "contacted",
+    "interested",
+    "considering",
+    "rejected",
+    "dormant",
+]
+IntentLevel = Literal["unknown", "low", "medium", "high"]
+InteractionOutcome = Literal["completed", "waiting"]
+WaitingOn = Literal["none", "customer", "manager", "internal", "scheduled_time"]
 
 
-class PinRequest(BaseModel):
-    pinned: bool
-
-
-class RejectRequest(BaseModel):
-    feedback: str = ""
-    cooldown_days: int = Field(default=30, ge=1, le=180)
-
-
-class ConsiderRequest(BaseModel):
-    feedback: str = ""
-    follow_up_days: int = Field(default=3, ge=1, le=90)
-
-
-class FollowUpRequest(BaseModel):
-    action: str = Field(min_length=1, max_length=120)
-    feedback: str = Field(default="", max_length=300)
-    stage: Stage
-    intent: Intent
-    next_step: str = Field(default="", max_length=200)
+class InteractionRequest(BaseModel):
+    raw_content: str = Field(min_length=1, max_length=4000)
+    structured_summary: str = Field(min_length=1, max_length=1000)
+    customer_feedback: str = Field(default="", max_length=1000)
+    action_taken: str = Field(default="客户跟进", max_length=120)
+    relationship_stage: RelationshipStage
+    intent_level: IntentLevel
+    current_need: str = Field(default="", max_length=500)
+    current_obstacle: str = Field(default="", max_length=500)
+    next_step: str = Field(default="", max_length=500)
     next_contact_at: Optional[str] = None
-    contact_method: str = Field(default="电话", max_length=30)
-
-
-class BehaviorSignalRequest(BaseModel):
-    asset_change_30d_pct: Optional[float] = Field(default=None, ge=-100, le=500)
-    recent_product_interest: Optional[str] = Field(default=None, max_length=100)
-    recent_consult_topic: Optional[str] = Field(default=None, max_length=100)
+    channel: Literal["phone", "wecom", "meeting", "app", "other"] = "phone"
+    outcome: InteractionOutcome = "completed"
+    waiting_on: WaitingOn = "none"

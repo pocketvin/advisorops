@@ -2,7 +2,7 @@
 
 一个面向证券客户经理日常客户经营的轻量 Web 产品原型。
 
-当前阶段：**规划优先，暂不继续扩展业务实现。**
+当前阶段：**Phase 1 单客户闭环施工。**
 
 项目不做完整 CRM，也不虚构已经接入任何真实券商内部系统。V1 使用固定模拟客户数据，重点验证：
 
@@ -76,11 +76,56 @@ AI 不负责：
 - React + TypeScript + Vite
 - TanStack Query
 - FastAPI
-- SQLModel
+- Python sqlite3 + 薄 Repository
 - SQLite（WAL）
 - pytest
 
 V1 不提前引入 Redis、Celery、Kafka、向量数据库或微服务。
+
+## Phase 1 当前实现
+
+已实现：
+
+- 3 个固定模拟客户
+- 工作区 / 发现区分离
+- actionable reason 过滤后再排序
+- 最近刚联系且没有新理由时抑制重复触达
+- 到期 / 逾期跟进重新进入发现区
+- 开始跟进后创建 WorkItem 并从发现区移出
+- 待我处理 / 等待中 / 今日已完成
+- 原始沟通内容 + 结构化经营记录同时保存
+- Customer Snapshot 更新
+- Field Change Audit
+- 客户完整 Activity 时间线
+- FastAPI API
+- React 工作台第一版源码
+
+当前验证：
+
+- 13 条领域 / SQLite 测试通过
+- FastAPI TestClient 完整闭环烟测通过
+- 前端 TS/TSX 语法编译检查通过
+- 尚未在本项目安装前端依赖，因此真实 `npm typecheck/build` 和浏览器联调仍待执行
+
+## 本地运行
+
+后端依赖准备好以后：
+
+```bash
+cd /Users/yu0/Workspace/10-Projects/Securities-Client-Workbench/backend
+uv sync
+uv run uvicorn app.main:app --reload --port 8010
+```
+
+前端依赖准备好以后：
+
+```bash
+cd /Users/yu0/Workspace/10-Projects/Securities-Client-Workbench/frontend
+npm install
+npm run dev
+```
+
+前端开发服务器会把 `/api` 代理到 `127.0.0.1:8010`。
 
 ## 文档
 
@@ -98,13 +143,12 @@ V1 不提前引入 Redis、Celery、Kafka、向量数据库或微服务。
 
 ## 当前代码说明
 
-`backend/` 和 `frontend/` 中已有一份前一轮产生的早期 scaffold。
+当前正在按纵向切片实现 Phase 1。
 
-它仅用于保留已有工作，不代表最终架构。正式施工前需要按本轮规划统一：
+V1 暂时保留 Python 标准库 sqlite3，而不是为了 ORM 迁移本身引入额外依赖。当前优先统一：
 
-- raw sqlite3 → SQLModel
 - 单一排序列表 → 工作区 + 发现区
-- interaction 只改字段 → 完整 Activity + Change Proposal
+- interaction 只改字段 → 完整 Activity + Field Change Audit（AI Change Proposal 后续接入）
 - 直接状态修改 → 可追溯状态变化
 
 ## 数据与合规声明

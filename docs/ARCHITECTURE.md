@@ -26,7 +26,7 @@ Rules  AI Service   Sync Service
  │      │             │
  └──────┼─────────────┘
         ▼
-   SQLModel / SQLite
+ sqlite3 Repository / SQLite
 ```
 
 ## 2. 前端
@@ -81,16 +81,16 @@ backend/app/
   db/
 ```
 
-### SQLModel
+### V1 数据访问
 
-V1 建议从当前 raw sqlite3 scaffold 收敛到 SQLModel：
+V1 直接使用 Python 标准库 `sqlite3`，并用薄 Repository 隔离 SQL：
 
-- 与 FastAPI / Pydantic 配合简单
-- 底层仍是 SQLAlchemy
-- SQLite → PostgreSQL 的迁移路径清晰
-- 省去手工 JSON / row mapping 样板代码
+- 当前表数量少、查询简单，ORM 不能明显降低复杂度
+- 不新增运行依赖，Demo 更容易启动和验收
+- Service 不直接拼 SQL，后续仍有明确替换边界
+- 业务规则与 Repository 解耦，迁移 PostgreSQL 时不需要重写工作流
 
-正式施工时再迁移；本轮不改现有业务代码。
+如果后续模型关系明显增多、需要 Alembic 迁移或 PostgreSQL，再评估 SQLAlchemy / SQLModel；不为了“技术栈更丰富”提前迁移。
 
 ## 4. 数据库
 

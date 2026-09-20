@@ -1,297 +1,329 @@
-from datetime import timedelta
-from typing import Any, Dict, List, Mapping, Optional
+from datetime import datetime
+from typing import Any, Callable, Dict, Mapping, Optional
 
 from . import repository
-from .db import PathLike
-from .priority import evaluate_priority
+from .db import PathLike, connect, transaction
+from .priority import evaluate_discovery
 from .seed import ensure_seeded, reset_demo_data
-from .time_utils import to_iso, utc_now
+from .time_utils import business_day_window, to_iso, utc_now
 
 
 class CustomerNotFoundError(KeyError):
     pass
 
 
+class WorkItemNotFoundError(KeyError):
+    pass
+
+
+class InvalidWorkStateError(RuntimeError):
+    pass
+
+
+Clock = Callable[[], datetime]
+
+
 class WorkbenchService:
-    def __init__(self, db_path: Optional[PathLike] = None) -> None:
+    def __init__(
+        self,
+        db_path: Optional[PathLike] = None,
+        clock: Clock = utc_now,
+    ) -> None:
         self.db_path = db_path
-        ensure_seeded(self.db_path)
+        self.clock = clock
+        ensure_seeded(self.db_path, now=self.clock())
 
-    def _get(self, customer_id: str) -> Dict[str, Any]:
-        customer = repository.get_customer(customer_id, self.db_path)
-        if customer is None:
-            raise CustomerNotFoundError(customer_id)
-        return customer
+    def _day_window_iso(self) -> tuple[str, str]:
+        start, end = business_day_window(self.clock())
+        return to_iso(start) or "", to_iso(end) or ""
 
-    def _decorate(self, customer: Mapping[str, Any]) -> Dict[str, Any]:
-        priority = evaluate_priority(customer)
-        return {"customer": dict(customer), "priority": priority.to_dict()}
+    def workbench(self) -> Dict[str, Any]:
+        now = self.clock()
+        day_start, day_end = self._day_window_iso()
 
-    def workbench(self, limit: int = 12) -> Dict[str, Any]:
-        decorated = [self._decorate(item) for item in repository.list_customers(self.db_path)]
-        decorated.sort(
+        with connect(self.db_path) as conn:
+            active = repository.list_active_work(conn)
+            completed = repository.list_completed_today(conn, day_start, day_end)
+            active_customer_ids = {item["customer_id"] for item in active}
+            completed_customer_ids = {item["customer_id"] for item in completed}
+
+            discovery = []
+            for customer in repository.list_customers(conn):
+                if customer["customer_id"] in active_customer_ids:
+                    continue
+                if customer["customer_id"] in completed_customer_ids:
+                    continue
+
+                result = evaluate_discovery(customer, now=now)
+                if result is None:
+                    continue
+
+                discovery.append(
+                    {
+                        "customer": customer,
+                        "discovery": result.to_dict(),
+                    }
+                )
+
+        discovery.sort(
             key=lambda item: (
-                bool(item["customer"].get("pinned")),
-                item["priority"]["score"],
-                item["customer"].get("next_contact_at") or "9999",
+                bool(item["discovery"]["pinned"]),
+                item["discovery"]["score"],
             ),
             reverse=True,
         )
-        items = decorated[: max(1, min(limit, 50))]
+
+        action_required = [item for item in active if item["status"] == "action_required"]
+        waiting = [item for item in active if item["status"] == "waiting"]
+
         return {
             "summary": {
-                "total_customers": len(decorated),
-                "high_priority": sum(1 for item in decorated if item["priority"]["level"] == "high"),
-                "follow_up_due": sum(
-                    1 for item in decorated if item["priority"]["effective_stage"] == "follow_up_due"
-                ),
-                "pinned": sum(1 for item in decorated if item["customer"].get("pinned")),
+                "action_required": len(action_required),
+                "waiting": len(waiting),
+                "completed_today": len(completed),
+                "discovery": len(discovery),
             },
-            "items": items,
+            "work_area": {
+                "action_required": action_required,
+                "waiting": waiting,
+                "completed_today": completed,
+            },
+            "discovery": discovery,
         }
 
-    def list_customers(
+    def customer_detail(self, customer_id: str) -> Dict[str, Any]:
+        with connect(self.db_path) as conn:
+            customer = repository.get_customer(conn, customer_id)
+            if customer is None:
+                raise CustomerNotFoundError(customer_id)
+            return {
+                "customer": customer,
+                "active_work_item": repository.get_active_work_for_customer(
+                    conn,
+                    customer_id,
+                ),
+                "activities": repository.list_activities(conn, customer_id),
+                "field_changes": repository.list_audits(conn, customer_id),
+            }
+
+    def start_work(self, customer_id: str) -> Dict[str, Any]:
+        now = self.clock()
+        now_iso = to_iso(now) or ""
+
+        with transaction(self.db_path) as conn:
+            customer = repository.get_customer(conn, customer_id)
+            if customer is None:
+                raise CustomerNotFoundError(customer_id)
+
+            existing = repository.get_active_work_for_customer(conn, customer_id)
+            if existing is not None:
+                return existing
+
+            discovery = evaluate_discovery(customer, now=now)
+            if discovery is None:
+                raise InvalidWorkStateError("该客户当前没有新的可执行发现理由")
+
+            work_item_id = repository.create_work_item(
+                conn,
+                {
+                    "customer_id": customer_id,
+                    "title": discovery.suggested_action,
+                    "status": "action_required",
+                    "waiting_on": "manager",
+                    "current_progress": customer.get("current_progress") or "",
+                    "next_action": discovery.suggested_action,
+                    "due_at": customer.get("next_contact_at"),
+                    "started_at": now_iso,
+                    "completed_at": None,
+                    "completion_activity_id": None,
+                    "created_at": now_iso,
+                    "updated_at": now_iso,
+                },
+            )
+
+            repository.insert_activity(
+                conn,
+                {
+                    "customer_id": customer_id,
+                    "source": "manual",
+                    "channel": "system",
+                    "activity_type": "work_started",
+                    "occurred_at": now_iso,
+                    "raw_content": "",
+                    "structured_summary": f"开始处理：{discovery.suggested_action}",
+                    "customer_feedback": "",
+                    "action_taken": "开始跟进",
+                    "next_step": discovery.suggested_action,
+                    "next_contact_at": customer.get("next_contact_at"),
+                    "stage_after": customer.get("relationship_stage"),
+                    "intent_after": customer.get("intent_level"),
+                    "metadata": {
+                        "discovery_score": discovery.score,
+                        "actionable_reason": discovery.actionable_reason,
+                    },
+                    "created_at": now_iso,
+                },
+            )
+
+            work_item = repository.get_work_item(conn, work_item_id)
+            assert work_item is not None
+            return work_item
+
+    def record_interaction(
         self,
-        search: str = "",
-        stage: str = "",
-        risk_level: str = "",
-        intent: str = "",
-        customer_level: str = "",
-    ) -> List[Dict[str, Any]]:
-        search_norm = search.strip().lower()
-        results: List[Dict[str, Any]] = []
-        for customer in repository.list_customers(self.db_path):
-            decorated = self._decorate(customer)
-            effective_stage = decorated["priority"]["effective_stage"]
-            if search_norm and search_norm not in (
-                f"{customer['name']} {customer['customer_id']} {customer.get('manager_note', '')}".lower()
-            ):
-                continue
-            if stage and effective_stage != stage:
-                continue
-            if risk_level and customer.get("risk_level") != risk_level:
-                continue
-            if intent and customer.get("intent") != intent:
-                continue
-            if customer_level and customer.get("customer_level") != customer_level:
-                continue
-            results.append(decorated)
-        results.sort(
-            key=lambda item: (
-                bool(item["customer"].get("pinned")),
-                item["priority"]["score"],
-            ),
-            reverse=True,
-        )
-        return results
-
-    def detail(self, customer_id: str) -> Dict[str, Any]:
-        customer = self._get(customer_id)
-        decorated = self._decorate(customer)
-        decorated["timeline"] = repository.list_timeline(customer_id, self.db_path)
-        return decorated
-
-    def set_pin(self, customer_id: str, pinned: bool) -> Dict[str, Any]:
-        customer = self._get(customer_id)
-        now = utc_now()
-        repository.update_customer(
-            customer_id,
-            {
-                "pinned": pinned,
-                "pinned_at": to_iso(now) if pinned else None,
-                "updated_at": to_iso(now),
-            },
-            self.db_path,
-        )
-        repository.add_timeline_event(
-            {
-                "customer_id": customer_id,
-                "event_type": "manual_priority",
-                "title": "人工置顶" if pinned else "取消置顶",
-                "detail": "客户经理手动调整当前工作关注顺序。",
-                "feedback": "",
-                "stage_after": customer["stage"],
-                "next_contact_at": customer.get("next_contact_at"),
-                "metadata": {"pinned": pinned},
-                "created_at": to_iso(now),
-            },
-            self.db_path,
-        )
-        return self.detail(customer_id)
-
-    def reject(
-        self,
-        customer_id: str,
-        feedback: str,
-        cooldown_days: int = 30,
+        work_item_id: int,
+        payload: Mapping[str, Any],
     ) -> Dict[str, Any]:
-        customer = self._get(customer_id)
-        now = utc_now()
-        measures = list(customer.get("measures") or [])
-        measures.append("记录客户明确拒绝")
-        next_contact = now + timedelta(days=max(1, min(cooldown_days, 180)))
-        repository.update_customer(
-            customer_id,
-            {
-                "stage": "rejected",
-                "intent": "low",
-                "last_feedback": feedback.strip() or "客户近期明确表示暂无需求。",
-                "last_contact_at": to_iso(now),
-                "historical_contact_count": int(customer.get("historical_contact_count") or 0) + 1,
-                "measures": measures[-8:],
-                "next_step": "进入冷静期，后续仅做必要服务维护",
-                "next_contact_at": to_iso(next_contact),
-                "pinned": False,
-                "pinned_at": None,
-                "updated_at": to_iso(now),
-            },
-            self.db_path,
-        )
-        repository.add_timeline_event(
-            {
-                "customer_id": customer_id,
-                "event_type": "contact",
-                "title": "客户明确拒绝",
-                "detail": f"进入 {max(1, min(cooldown_days, 180))} 天冷静期，避免短期重复触达。",
-                "feedback": feedback.strip(),
-                "stage_after": "rejected",
-                "next_contact_at": to_iso(next_contact),
-                "metadata": {"cooldown_days": cooldown_days},
-                "created_at": to_iso(now),
-            },
-            self.db_path,
-        )
-        return self.detail(customer_id)
+        now = self.clock()
+        now_iso = to_iso(now) or ""
 
-    def mark_considering(
-        self,
-        customer_id: str,
-        feedback: str,
-        follow_up_days: int = 3,
-    ) -> Dict[str, Any]:
-        customer = self._get(customer_id)
-        now = utc_now()
-        days = max(1, min(follow_up_days, 90))
-        next_contact = now + timedelta(days=days)
-        measures = list(customer.get("measures") or [])
-        measures.append(f"约定 {days} 天后回访")
-        current_intent = customer.get("intent") or "unknown"
-        intent = "medium" if current_intent in {"unknown", "low"} else current_intent
-        repository.update_customer(
-            customer_id,
-            {
-                "stage": "considering",
-                "intent": intent,
-                "last_feedback": feedback.strip() or f"客户表示再考虑 {days} 天。",
-                "last_contact_at": to_iso(now),
-                "historical_contact_count": int(customer.get("historical_contact_count") or 0) + 1,
-                "measures": measures[-8:],
-                "next_step": f"{days} 天后按约定回访",
-                "next_contact_at": to_iso(next_contact),
-                "updated_at": to_iso(now),
-            },
-            self.db_path,
-        )
-        repository.add_timeline_event(
-            {
-                "customer_id": customer_id,
-                "event_type": "contact",
-                "title": "客户表示再考虑",
-                "detail": f"已约定 {days} 天后再次联系；到期前降低工作优先级。",
-                "feedback": feedback.strip(),
-                "stage_after": "considering",
-                "next_contact_at": to_iso(next_contact),
-                "metadata": {"follow_up_days": days},
-                "created_at": to_iso(now),
-            },
-            self.db_path,
-        )
-        return self.detail(customer_id)
+        with transaction(self.db_path) as conn:
+            work_item = repository.get_work_item(conn, work_item_id)
+            if work_item is None:
+                raise WorkItemNotFoundError(work_item_id)
+            if work_item["status"] not in {"action_required", "waiting"}:
+                raise InvalidWorkStateError("只有进行中的工作项可以记录新的处理结果")
 
-    def record_follow_up(self, customer_id: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
-        customer = self._get(customer_id)
-        now = utc_now()
-        action = str(payload.get("action") or "完成一次客户跟进").strip()
-        feedback = str(payload.get("feedback") or "").strip()
-        stage = str(payload.get("stage") or customer["stage"])
-        intent = str(payload.get("intent") or customer["intent"])
-        next_step = str(payload.get("next_step") or "").strip()
-        next_contact_at = payload.get("next_contact_at")
-        contact_method = str(payload.get("contact_method") or customer.get("contact_method") or "电话")
-        measures = list(customer.get("measures") or [])
-        measures.append(action)
+            customer = repository.get_customer(conn, work_item["customer_id"])
+            if customer is None:
+                raise CustomerNotFoundError(work_item["customer_id"])
 
-        repository.update_customer(
-            customer_id,
-            {
-                "stage": stage,
-                "intent": intent,
-                "last_feedback": feedback,
-                "last_contact_at": to_iso(now),
-                "contact_method": contact_method,
-                "historical_contact_count": int(customer.get("historical_contact_count") or 0) + 1,
-                "measures": measures[-8:],
+            stage = str(payload.get("relationship_stage") or customer["relationship_stage"])
+            intent = str(payload.get("intent_level") or customer["intent_level"])
+            raw_content = str(payload.get("raw_content") or "").strip()
+            summary = str(payload.get("structured_summary") or "").strip()
+            feedback = str(payload.get("customer_feedback") or "").strip()
+            next_step = str(payload.get("next_step") or "").strip()
+            next_contact_at = payload.get("next_contact_at") or None
+            current_need = str(payload.get("current_need") or customer.get("current_need") or "").strip()
+            current_obstacle = str(
+                payload.get("current_obstacle") or customer.get("current_obstacle") or ""
+            ).strip()
+            channel = str(payload.get("channel") or "phone")
+            outcome = str(payload.get("outcome") or "completed")
+            waiting_on = str(payload.get("waiting_on") or "none")
+
+            if not raw_content:
+                raise ValueError("必须保留本次沟通的原始记录")
+            if not summary:
+                raise ValueError("必须确认本次沟通的结构化摘要")
+            if outcome not in {"completed", "waiting"}:
+                raise ValueError("outcome 必须为 completed 或 waiting")
+            if outcome == "waiting" and waiting_on == "none":
+                raise ValueError("等待中必须说明 waiting_on")
+
+            activity_id = repository.insert_activity(
+                conn,
+                {
+                    "customer_id": customer["customer_id"],
+                    "source": "manual",
+                    "channel": channel,
+                    "activity_type": "interaction",
+                    "occurred_at": now_iso,
+                    "raw_content": raw_content,
+                    "structured_summary": summary,
+                    "customer_feedback": feedback,
+                    "action_taken": str(payload.get("action_taken") or "客户跟进").strip(),
+                    "next_step": next_step,
+                    "next_contact_at": next_contact_at,
+                    "stage_after": stage,
+                    "intent_after": intent,
+                    "metadata": {
+                        "confirmation_mode": "human_confirmed",
+                        "ai_extraction": False,
+                    },
+                    "created_at": now_iso,
+                },
+            )
+
+            customer_updates = {
+                "relationship_stage": stage,
+                "intent_level": intent,
+                "current_need": current_need,
+                "current_obstacle": current_obstacle,
+                "current_progress": summary,
                 "next_step": next_step,
-                "next_contact_at": next_contact_at or None,
-                "updated_at": to_iso(now),
-            },
-            self.db_path,
-        )
-        repository.add_timeline_event(
-            {
-                "customer_id": customer_id,
-                "event_type": "contact",
-                "title": action,
-                "detail": next_step,
-                "feedback": feedback,
-                "stage_after": stage,
-                "next_contact_at": next_contact_at or None,
-                "metadata": {"contact_method": contact_method, "intent": intent},
-                "created_at": to_iso(now),
-            },
-            self.db_path,
-        )
-        return self.detail(customer_id)
+                "next_contact_at": next_contact_at,
+                "last_contact_at": now_iso,
+                "recent_signal": "",
+                "updated_at": now_iso,
+            }
 
-    def add_behavior_signal(
-        self,
-        customer_id: str,
-        asset_change_30d_pct: Optional[float] = None,
-        recent_product_interest: Optional[str] = None,
-        recent_consult_topic: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        customer = self._get(customer_id)
-        now = utc_now()
-        updates: Dict[str, Any] = {"updated_at": to_iso(now)}
-        detail_parts: List[str] = []
-        if asset_change_30d_pct is not None:
-            updates["asset_change_30d_pct"] = float(asset_change_30d_pct)
-            detail_parts.append(f"近30日资产变化 {float(asset_change_30d_pct):+.1f}%")
-        if recent_product_interest is not None:
-            updates["recent_product_interest"] = recent_product_interest.strip()
-            if recent_product_interest.strip():
-                detail_parts.append(f"新增关注：{recent_product_interest.strip()}")
-        if recent_consult_topic is not None:
-            updates["recent_consult_topic"] = recent_consult_topic.strip()
-            if recent_consult_topic.strip():
-                detail_parts.append(f"咨询主题：{recent_consult_topic.strip()}")
-        repository.update_customer(customer_id, updates, self.db_path)
-        repository.add_timeline_event(
-            {
-                "customer_id": customer_id,
-                "event_type": "behavior_signal",
-                "title": "客户行为信号更新",
-                "detail": "；".join(detail_parts) or "更新近期行为信号。",
-                "feedback": "",
-                "stage_after": customer["stage"],
-                "next_contact_at": customer.get("next_contact_at"),
-                "metadata": {"source": "demo_simulation"},
-                "created_at": to_iso(now),
-            },
-            self.db_path,
-        )
-        return self.detail(customer_id)
+            auditable_fields = (
+                "relationship_stage",
+                "intent_level",
+                "current_need",
+                "current_obstacle",
+                "current_progress",
+                "next_step",
+                "next_contact_at",
+            )
+            audits = []
+            for field in auditable_fields:
+                old_value = customer.get(field)
+                new_value = customer_updates.get(field)
+                if old_value == new_value:
+                    continue
+                audits.append(
+                    {
+                        "customer_id": customer["customer_id"],
+                        "source_activity_id": activity_id,
+                        "field_name": field,
+                        "old_value": None if old_value is None else str(old_value),
+                        "new_value": None if new_value is None else str(new_value),
+                        "changed_by": "relationship_manager",
+                        "changed_at": now_iso,
+                    }
+                )
+
+            repository.update_customer(
+                conn,
+                customer["customer_id"],
+                customer_updates,
+            )
+            repository.insert_audits(conn, audits)
+
+            if outcome == "waiting":
+                repository.update_work_item(
+                    conn,
+                    work_item_id,
+                    {
+                        "status": "waiting",
+                        "waiting_on": waiting_on,
+                        "current_progress": summary,
+                        "next_action": next_step,
+                        "due_at": next_contact_at,
+                        "updated_at": now_iso,
+                    },
+                )
+            else:
+                repository.update_work_item(
+                    conn,
+                    work_item_id,
+                    {
+                        "status": "completed_today",
+                        "waiting_on": "none",
+                        "current_progress": summary,
+                        "next_action": next_step,
+                        "due_at": next_contact_at,
+                        "completed_at": now_iso,
+                        "completion_activity_id": activity_id,
+                        "updated_at": now_iso,
+                    },
+                )
+
+            updated_work = repository.get_work_item(conn, work_item_id)
+            updated_customer = repository.get_customer(conn, customer["customer_id"])
+            assert updated_work is not None
+            assert updated_customer is not None
+
+            return {
+                "work_item": updated_work,
+                "customer": updated_customer,
+                "activity_id": activity_id,
+                "applied_changes": audits,
+            }
 
     def reset_demo(self) -> Dict[str, Any]:
-        reset_demo_data(self.db_path)
+        reset_demo_data(self.db_path, now=self.clock())
         return self.workbench()
