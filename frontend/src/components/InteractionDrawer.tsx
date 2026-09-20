@@ -52,6 +52,23 @@ function toIso(value: string): string | null {
   return new Date(value).toISOString();
 }
 
+function futureLocalInput(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  const pad = (number: number) => String(number).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    "-",
+    pad(date.getMonth() + 1),
+    "-",
+    pad(date.getDate()),
+    "T",
+    pad(date.getHours()),
+    ":",
+    pad(date.getMinutes()),
+  ].join("");
+}
+
 export default function InteractionDrawer({
   workItemId,
   customerId,
@@ -72,6 +89,7 @@ export default function InteractionDrawer({
   const [intent, setIntent] = useState<IntentLevel>("medium");
   const [need, setNeed] = useState("");
   const [obstacle, setObstacle] = useState("");
+  const [managerNote, setManagerNote] = useState("");
   const [nextStep, setNextStep] = useState("");
   const [nextContact, setNextContact] = useState("");
   const [channel, setChannel] = useState<InteractionPayload["channel"]>("phone");
@@ -79,6 +97,12 @@ export default function InteractionDrawer({
     useState<InteractionPayload["outcome"]>("completed");
   const [waitingOn, setWaitingOn] =
     useState<InteractionPayload["waiting_on"]>("none");
+  const [proposalId, setProposalId] = useState<number | null>(null);
+  const [aiNote, setAiNote] = useState<{
+    reasoning: string;
+    confidence: number;
+    model: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!customer) return;
@@ -86,9 +110,39 @@ export default function InteractionDrawer({
     setIntent(customer.intent_level);
     setNeed(customer.current_need);
     setObstacle(customer.current_obstacle);
+    setManagerNote(customer.manager_note);
     setNextStep(customer.next_step);
     setNextContact(toLocalInput(customer.next_contact_at));
   }, [customer]);
+
+  const aiMutation = useMutation({
+    mutationFn: () =>
+      api.aiExtract(customerId, {
+        raw_content: rawContent,
+        channel,
+      }),
+    onSuccess: (result) => {
+      const suggestion = result.suggested_interaction;
+      setProposalId(result.proposal.id);
+      setSummary(suggestion.structured_summary);
+      setFeedback(suggestion.customer_feedback);
+      setStage(suggestion.relationship_stage);
+      setIntent(suggestion.intent_level);
+      setNeed(suggestion.current_need);
+      setObstacle(suggestion.current_obstacle);
+      setNextStep(suggestion.next_step);
+      setNextContact(toLocalInput(suggestion.next_contact_at));
+      setOutcome(suggestion.outcome);
+      setWaitingOn(
+        suggestion.outcome === "waiting" ? suggestion.waiting_on : "none",
+      );
+      setAiNote({
+        reasoning: suggestion.reasoning_summary,
+        confidence: suggestion.confidence,
+        model: result.proposal.model ?? "Kimi K3",
+      });
+    },
+  });
 
   const mutation = useMutation({
     mutationFn: (payload: InteractionPayload) =>
@@ -97,6 +151,8 @@ export default function InteractionDrawer({
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["workbench"] }),
         queryClient.invalidateQueries({ queryKey: ["customer", customerId] }),
+        queryClient.invalidateQueries({ queryKey: ["activities"] }),
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
       ]);
       onClose();
     },
@@ -117,11 +173,13 @@ export default function InteractionDrawer({
       intent_level: intent,
       current_need: need,
       current_obstacle: obstacle,
+      manager_note: managerNote,
       next_step: nextStep,
       next_contact_at: toIso(nextContact),
       channel,
       outcome,
       waiting_on: outcome === "waiting" ? waitingOn : "none",
+      proposal_id: proposalId,
     });
   }
 
@@ -137,7 +195,7 @@ export default function InteractionDrawer({
             <p className="eyebrow">记录经营进展</p>
             <h2>{customer?.name ?? "正在读取客户…"}</h2>
             <p className="muted">
-              当前为人工确认模式。后续 AI 会先自动填充这些字段，再由客户经理确认。
+              原始记录始终保留；Kimi K3 只生成候选字段，最后由你确认。
             </p>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="关闭">
@@ -154,7 +212,7 @@ export default function InteractionDrawer({
                 <span>01</span>
                 <div>
                   <h3>刚刚发生了什么</h3>
-                  <p>原始记录会完整保留，不能被结构化字段替代。</p>
+                  <p>直接按你自己的话记录，后续复盘仍能看到原文。</p>
                 </div>
               </div>
 
@@ -164,7 +222,11 @@ export default function InteractionDrawer({
                   required
                   rows={5}
                   value={rawContent}
-                  onChange={(event) => setRawContent(event.target.value)}
+                  onChange={(event) => {
+                    setRawContent(event.target.value);
+                    setProposalId(null);
+                    setAiNote(null);
+                  }}
                   placeholder="例如：刚刚给张总打了电话，他说方案看过了，但是还想再考虑三天……"
                 />
               </label>
@@ -174,9 +236,13 @@ export default function InteractionDrawer({
                   <span>渠道</span>
                   <select
                     value={channel}
-                    onChange={(event) =>
-                      setChannel(event.target.value as InteractionPayload["channel"])
-                    }
+                    onChange={(event) => {
+                      setChannel(
+                        event.target.value as InteractionPayload["channel"],
+                      );
+                      setProposalId(null);
+                      setAiNote(null);
+                    }}
                   >
                     <option value="phone">电话</option>
                     <option value="wecom">企业微信</option>
@@ -193,14 +259,48 @@ export default function InteractionDrawer({
                   />
                 </label>
               </div>
+
+              <div className="ai-extract-row">
+                <div>
+                  <strong>Kimi K3 自动整理</strong>
+                  <span>只预填候选结果，不会直接修改客户状态。</span>
+                </div>
+                <button
+                  type="button"
+                  className="button ai-button"
+                  disabled={!rawContent.trim() || aiMutation.isPending}
+                  onClick={() => aiMutation.mutate()}
+                >
+                  {aiMutation.isPending ? "Kimi 正在整理…" : "AI 整理"}
+                </button>
+              </div>
+
+              {aiMutation.error && (
+                <div className="error-banner">
+                  AI 整理失败：{aiMutation.error.message}。可以继续手工填写保存。
+                </div>
+              )}
+
+              {aiNote && (
+                <div className="ai-result-note">
+                  <div>
+                    <span>AI 候选已填充 · {aiNote.model}</span>
+                    <strong>
+                      置信度 {Math.round(aiNote.confidence * 100)}%
+                    </strong>
+                  </div>
+                  <p>{aiNote.reasoning}</p>
+                  <small>下面所有字段仍可人工修改，保存时以最终表单为准。</small>
+                </div>
+              )}
             </section>
 
             <section className="form-section">
               <div className="section-heading">
                 <span>02</span>
                 <div>
-                  <h3>确认系统要沉淀的经营信息</h3>
-                  <p>这一层未来由 AI 预填，但现在先验证状态逻辑。</p>
+                  <h3>确认要沉淀的经营信息</h3>
+                  <p>AI 预填后仍由客户经理逐项确认。</p>
                 </div>
               </div>
 
@@ -271,6 +371,16 @@ export default function InteractionDrawer({
                   placeholder="例如：近期可能有资金使用安排"
                 />
               </label>
+
+              <label className="field">
+                <span>客户经理备注</span>
+                <textarea
+                  rows={2}
+                  value={managerNote}
+                  onChange={(event) => setManagerNote(event.target.value)}
+                  placeholder="只记录需要长期保留的经营备注，AI 不会自动修改。"
+                />
+              </label>
             </section>
 
             <section className="form-section">
@@ -278,8 +388,53 @@ export default function InteractionDrawer({
                 <span>03</span>
                 <div>
                   <h3>下一步怎么走</h3>
-                  <p>完成后退出今日待处理；等待中则继续留在工作区。</p>
+                  <p>完成后退出当前工作；等待中则继续留在工作区。</p>
                 </div>
+              </div>
+
+              <div className="quick-action-row">
+                <button
+                  type="button"
+                  className="quick-action reject"
+                  onClick={() => {
+                    setStage("rejected");
+                    setIntent("low");
+                    setOutcome("completed");
+                    setWaitingOn("none");
+                    setNextStep("");
+                    setNextContact("");
+                    if (!summary.trim()) {
+                      setSummary("客户明确表示近期暂无需求，本次主动跟进结束。");
+                    }
+                    if (!feedback.trim()) {
+                      setFeedback("近期没有需求，先不要联系。");
+                    }
+                  }}
+                >
+                  明确拒绝
+                </button>
+                <button
+                  type="button"
+                  className="quick-action"
+                  onClick={() => {
+                    setStage("considering");
+                    if (intent === "unknown" || intent === "low") {
+                      setIntent("medium");
+                    }
+                    setOutcome("completed");
+                    setWaitingOn("none");
+                    setNextStep("三天后按约定回访");
+                    setNextContact(futureLocalInput(3));
+                    if (!summary.trim()) {
+                      setSummary("客户表示仍需考虑，约定三天后再次联系。");
+                    }
+                    if (!feedback.trim()) {
+                      setFeedback("我再考虑三天。");
+                    }
+                  }}
+                >
+                  再考虑 3 天
+                </button>
               </div>
 
               <label className="field">

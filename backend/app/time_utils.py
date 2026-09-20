@@ -9,14 +9,30 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def parse_datetime(value: Optional[str]) -> Optional[datetime]:
-    if not value:
-        return None
+def _parse_datetime_strict(value: str) -> datetime:
     normalized = value.replace("Z", "+00:00")
     parsed = datetime.fromisoformat(normalized)
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=BUSINESS_TZ)
     return parsed.astimezone(timezone.utc)
+
+
+def parse_datetime(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return _parse_datetime_strict(value)
+    except (TypeError, ValueError):
+        # Discovery/read paths must not crash the whole workbench because one
+        # legacy/external timestamp is malformed. Write paths validate first.
+        return None
+
+
+def validate_datetime_string(value: Optional[str]) -> Optional[str]:
+    if value is None or value == "":
+        return None
+    _parse_datetime_strict(value)
+    return value
 
 
 def to_iso(value: Optional[datetime]) -> Optional[str]:

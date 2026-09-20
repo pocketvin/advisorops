@@ -1,10 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../api";
 
 interface Props {
   customerId: string;
   onClose: () => void;
+  onRecordWork: (workItemId: number, customerId: string) => void;
 }
 
 function formatTime(value: string | null | undefined): string {
@@ -33,11 +35,84 @@ const intentLabels: Record<string, string> = {
   high: "高",
 };
 
-export default function CustomerDrawer({ customerId, onClose }: Props) {
+export default function CustomerDrawer({
+  customerId,
+  onClose,
+  onRecordWork,
+}: Props) {
+  const queryClient = useQueryClient();
+  const [contextPreview, setContextPreview] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState("复制");
   const query = useQuery({
     queryKey: ["customer", customerId],
     queryFn: () => api.customer(customerId),
   });
+
+  const briefMutation = useMutation({
+    mutationFn: () => api.aiBrief(customerId),
+  });
+
+  const contextMutation = useMutation({
+    mutationFn: () => api.contextPack(customerId),
+    onSuccess: (result) => setContextPreview(result.text),
+  });
+
+  const manualWork = useMutation({
+    mutationFn: () => api.manualWork(customerId),
+    onSuccess: async (workItem) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workbench"] }),
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
+        queryClient.invalidateQueries({ queryKey: ["customer", customerId] }),
+      ]);
+      onClose();
+      onRecordWork(workItem.id, customerId);
+    },
+  });
+
+  const pinMutation = useMutation({
+    mutationFn: (pinned: boolean) => api.setPin(customerId, pinned),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workbench"] }),
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
+        queryClient.invalidateQueries({ queryKey: ["customer", customerId] }),
+      ]);
+    },
+  });
+
+  const applyProposal = useMutation({
+    mutationFn: api.applyProposal,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["customer", customerId] }),
+        queryClient.invalidateQueries({ queryKey: ["workbench"] }),
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
+        queryClient.invalidateQueries({ queryKey: ["activities"] }),
+      ]);
+    },
+  });
+
+  const rejectProposal = useMutation({
+    mutationFn: api.rejectProposal,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["customer", customerId] }),
+        queryClient.invalidateQueries({ queryKey: ["activities"] }),
+      ]);
+    },
+  });
+
+  async function copyContext() {
+    if (!contextPreview) return;
+    try {
+      await navigator.clipboard.writeText(contextPreview);
+      setCopyState("已复制");
+      window.setTimeout(() => setCopyState("复制"), 1600);
+    } catch {
+      setCopyState("复制失败");
+    }
+  }
 
   return (
     <div className="drawer-backdrop" role="presentation" onMouseDown={onClose}>
@@ -62,6 +137,25 @@ export default function CustomerDrawer({ customerId, onClose }: Props) {
 
           {query.data && (
             <>
+              <div className="customer-primary-actions">
+                <button
+                  className="button primary"
+                  disabled={manualWork.isPending}
+                  onClick={() => manualWork.mutate()}
+                >
+                  {manualWork.isPending ? "正在进入记录…" : "记录客户动态"}
+                </button>
+                <button
+                  className="button secondary"
+                  disabled={pinMutation.isPending}
+                  onClick={() =>
+                    pinMutation.mutate(!query.data!.customer.pinned)
+                  }
+                >
+                  {query.data.customer.pinned ? "取消置顶" : "人工置顶"}
+                </button>
+              </div>
+
               <section className="profile-card">
                 <div className="profile-grid">
                   <div>
@@ -88,6 +182,29 @@ export default function CustomerDrawer({ customerId, onClose }: Props) {
                   </div>
                 </div>
 
+                <div className="profile-block profile-facts">
+                  <span>资产与持仓</span>
+                  <p>
+                    {query.data.customer.total_assets_band} · 可投资资金{" "}
+                    {query.data.customer.investable_funds_band} ·{" "}
+                    {query.data.customer.holdings_summary || "暂无持仓摘要"}
+                  </p>
+                </div>
+                <div className="profile-block profile-facts">
+                  <span>近期行为</span>
+                  <p>
+                    近30日资产变化{" "}
+                    {query.data.customer.asset_change_30d_pct >= 0 ? "+" : ""}
+                    {query.data.customer.asset_change_30d_pct.toFixed(1)}%
+                    {" · "}
+                    最近关注：
+                    {query.data.customer.recent_product_interest || "无"}
+                    {" · "}
+                    最近咨询：
+                    {query.data.customer.recent_consult_topic || "无"}
+                  </p>
+                </div>
+
                 <div className="profile-block">
                   <span>当前需求</span>
                   <p>{query.data.customer.current_need || "暂无明确记录"}</p>
@@ -104,7 +221,126 @@ export default function CustomerDrawer({ customerId, onClose }: Props) {
                   <span>下一步</span>
                   <p>{query.data.customer.next_step || "尚未安排"}</p>
                 </div>
+
+                <div className="profile-block">
+                  <span>客户经理备注</span>
+                  <p>{query.data.customer.manager_note || "暂无备注"}</p>
+                </div>
               </section>
+
+              <section className="ai-tools-card">
+                <div className="ai-tools-head">
+                  <div>
+                    <p className="eyebrow">KIMI K3</p>
+                    <h3>AI 经营辅助</h3>
+                    <p className="muted">
+                      摘要只读；咨询上下文默认脱敏后复制给更强 AI。
+                    </p>
+                  </div>
+                  <div className="ai-tool-actions">
+                    <button
+                      className="button secondary"
+                      disabled={briefMutation.isPending}
+                      onClick={() => briefMutation.mutate()}
+                    >
+                      {briefMutation.isPending ? "正在整理…" : "30 秒摘要"}
+                    </button>
+                    <button
+                      className="button ai-button"
+                      disabled={contextMutation.isPending}
+                      onClick={() => contextMutation.mutate()}
+                    >
+                      {contextMutation.isPending ? "正在生成…" : "AI 咨询上下文"}
+                    </button>
+                  </div>
+                </div>
+
+                {briefMutation.error && (
+                  <div className="error-banner">
+                    摘要失败：{briefMutation.error.message}
+                  </div>
+                )}
+
+                {briefMutation.data && (
+                  <div className="brief-result">
+                    <strong>{briefMutation.data.summary}</strong>
+                    <div className="brief-grid">
+                      <div>
+                        <span>当前关注</span>
+                        <p>{briefMutation.data.main_focus}</p>
+                      </div>
+                      <div>
+                        <span>当前障碍</span>
+                        <p>{briefMutation.data.current_obstacle || "暂无"}</p>
+                      </div>
+                    </div>
+                    <div className="brief-focus">
+                      <span>下次最值得确认</span>
+                      <p>{briefMutation.data.next_conversation_focus}</p>
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              {query.data.pending_proposals.length > 0 && (
+                <section className="pending-section">
+                  <div className="section-title-row compact-heading">
+                    <div>
+                      <p className="eyebrow">PENDING CHANGES</p>
+                      <h3>待确认状态变化</h3>
+                    </div>
+                    <span className="section-count">
+                      {query.data.pending_proposals.length}
+                    </span>
+                  </div>
+                  <div className="proposal-stack">
+                    {query.data.pending_proposals.map((proposal) => (
+                      <article className="proposal-card" key={proposal.id}>
+                        <div className="proposal-head">
+                          <div>
+                            <strong>{proposal.extraction_summary}</strong>
+                            <span>
+                              {proposal.model ?? "AI"} ·{" "}
+                              {proposal.confidence != null
+                                ? String(Math.round(proposal.confidence * 100)) + "%"
+                                : "待确认"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="proposal-changes">
+                          {Object.entries(proposal.proposed_changes).map(
+                            ([field, change]) => (
+                              <div key={field}>
+                                <span>{field}</span>
+                                <code>
+                                  {String(change.from ?? "—")} →{" "}
+                                  {String(change.to ?? "—")}
+                                </code>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                        <div className="card-actions">
+                          <button
+                            className="button ghost"
+                            disabled={rejectProposal.isPending}
+                            onClick={() => rejectProposal.mutate(proposal.id)}
+                          >
+                            忽略
+                          </button>
+                          <button
+                            className="button primary compact"
+                            disabled={applyProposal.isPending}
+                            onClick={() => applyProposal.mutate(proposal.id)}
+                          >
+                            确认更新
+                          </button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {query.data.active_work_item && (
                 <section className="active-work-callout">
@@ -137,6 +373,7 @@ export default function CustomerDrawer({ customerId, onClose }: Props) {
                         <div className="timeline-meta">
                           <span>{formatTime(activity.occurred_at)}</span>
                           <span>{activity.channel}</span>
+                          <span>{activity.source}</span>
                         </div>
                         <h4>
                           {activity.action_taken ||
@@ -169,7 +406,7 @@ export default function CustomerDrawer({ customerId, onClose }: Props) {
                     </div>
                   </div>
                   <div className="audit-list">
-                    {query.data.field_changes.slice(0, 8).map((change) => (
+                    {query.data.field_changes.slice(0, 10).map((change) => (
                       <div className="audit-row" key={change.id}>
                         <span>{change.field_name}</span>
                         <code>
@@ -183,6 +420,30 @@ export default function CustomerDrawer({ customerId, onClose }: Props) {
             </>
           )}
         </div>
+
+        {contextPreview && (
+          <div className="context-preview-panel">
+            <div className="context-preview-head">
+              <div>
+                <p className="eyebrow">SAFE CONTEXT PACK</p>
+                <h3>AI 咨询上下文预览</h3>
+                <p>已去掉姓名等直接身份字段，再由你主动复制。</p>
+              </div>
+              <button
+                className="icon-button"
+                onClick={() => setContextPreview(null)}
+              >
+                ×
+              </button>
+            </div>
+            <pre>{contextPreview}</pre>
+            <div className="form-actions">
+              <button className="button primary" onClick={copyContext}>
+                {copyState}
+              </button>
+            </div>
+          </div>
+        )}
       </aside>
     </div>
   );

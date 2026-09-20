@@ -86,6 +86,13 @@ class DiscoveryRuleTests(unittest.TestCase):
         self.assertNotIn("manual_pin", {factor.code for factor in result.factors})
         self.assertLess(result.score, 70)
 
+    def test_malformed_legacy_follow_up_time_does_not_crash_discovery(self):
+        result = evaluate_discovery(
+            customer(next_contact_at="not-a-date"),
+            now=NOW,
+        )
+        self.assertIsNotNone(result)
+
 
 if __name__ == "__main__":
     unittest.main()

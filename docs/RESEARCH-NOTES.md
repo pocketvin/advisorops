@@ -191,3 +191,32 @@ Demo：
 - AI Context Pack 默认做白名单和脱敏。
 - 不设计“完整真实客户数据一键复制到个人外部 AI”作为生产方案。
 - 企业真实落地应接公司批准的 AI Gateway / 模型服务。
+
+
+## 11. Kimi K3 推理强度
+
+Kimi 官方文档说明：
+
+- Kimi K3 始终进行推理。
+- 顶层 `reasoning_effort` 支持 `low / high / max`。
+- 默认值是 `max`。
+- 官方结构化输出支持 `response_format=json_schema` + `strict=true`，最终只解析 `message.content`。
+
+参考：
+
+- https://platform.kimi.com/docs/guide/use-reasoning-effort
+- https://platform.kimi.com/docs/guide/kimi-k3-quickstart
+
+本项目的自然语言沟通抽取和 30 秒摘要属于低复杂度结构化知识工作，不需要最大推理深度，因此 V1 显式使用：
+
+```text
+reasoning_effort = low
+```
+
+目的：
+
+- 降低交互延迟
+- 降低 reasoning token 消耗
+- 给最终 JSON 留出更稳定的 completion 预算
+
+复杂客户沟通策略本身不在项目内强行用同一调用解决，而是通过脱敏 AI Context Pack 交给更强的独立 AI 会话。

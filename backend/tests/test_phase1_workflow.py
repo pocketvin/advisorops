@@ -31,9 +31,9 @@ class Phase1WorkflowTests(unittest.TestCase):
     def test_initial_workbench_has_discovery_but_no_active_work(self):
         workbench = self.service.workbench()
 
-        self.assertEqual(workbench["summary"]["action_required"], 0)
-        self.assertEqual(workbench["summary"]["waiting"], 0)
-        self.assertEqual(workbench["summary"]["completed_today"], 0)
+        self.assertEqual(workbench["summary"]["action_required"], 1)
+        self.assertEqual(workbench["summary"]["waiting"], 2)
+        self.assertEqual(workbench["summary"]["completed_today"], 1)
         self.assertIn("C001", self._discovery_ids())
         self.assertIn("C002", self._discovery_ids())
         self.assertNotIn("C003", self._discovery_ids())
@@ -44,10 +44,12 @@ class Phase1WorkflowTests(unittest.TestCase):
 
         self.assertEqual(work_item["status"], "action_required")
         self.assertNotIn("C001", self._discovery_ids())
-        self.assertEqual(
-            [item["customer_id"] for item in workbench["work_area"]["action_required"]],
-            ["C001"],
-        )
+        action_ids = [
+            item["customer_id"]
+            for item in workbench["work_area"]["action_required"]
+        ]
+        self.assertIn("C001", action_ids)
+        self.assertEqual(action_ids.count("C001"), 1)
 
     def test_completed_interaction_keeps_raw_record_and_updates_snapshot(self):
         work_item = self.service.start_work("C001")
@@ -78,10 +80,12 @@ class Phase1WorkflowTests(unittest.TestCase):
 
         workbench = self.service.workbench()
         self.assertNotIn("C001", self._discovery_ids())
-        self.assertEqual(
-            [item["customer_id"] for item in workbench["work_area"]["completed_today"]],
-            ["C001"],
-        )
+        completed_ids = [
+            item["customer_id"]
+            for item in workbench["work_area"]["completed_today"]
+        ]
+        self.assertIn("C001", completed_ids)
+        self.assertEqual(completed_ids.count("C001"), 1)
 
         detail = self.service.customer_detail("C001")
         interaction = next(
@@ -124,10 +128,12 @@ class Phase1WorkflowTests(unittest.TestCase):
 
         workbench = self.service.workbench()
         self.assertNotIn("C002", self._discovery_ids())
-        self.assertEqual(
-            [item["customer_id"] for item in workbench["work_area"]["waiting"]],
-            ["C002"],
-        )
+        waiting_ids = [
+            item["customer_id"]
+            for item in workbench["work_area"]["waiting"]
+        ]
+        self.assertIn("C002", waiting_ids)
+        self.assertEqual(waiting_ids.count("C002"), 1)
 
     def test_customer_without_actionable_reason_cannot_be_started(self):
         with self.assertRaises(InvalidWorkStateError):

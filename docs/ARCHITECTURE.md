@@ -165,11 +165,12 @@ V1 模拟数据允许重建数据库，因此不急于引入 Alembic；开始保
 
 ### AIService
 
-- interaction extraction
+- Kimi K3 interaction extraction
 - customer brief
-- next-action wording
 - signal candidate extraction
-- AI context pack
+- Change Proposal
+
+Next Best Action 的 V1 文案由 deterministic rules 直接给出，不在每次工作台刷新时调用模型。
 
 ### ContextPackService
 
@@ -223,8 +224,8 @@ sync_all()
 - 手动刷新：必须有
 - 最近同步时间：必须显示
 - 单数据源同步状态：可查看
-- 周期同步：等 Mock Connector 完成后，用轻量 scheduler 验证即可
-- 默认频率：产品配置，不写死业务规则
+- 周期同步：V1 不实现；手动刷新已足够演示同步语义
+- 未来真实部署再按数据源能力选择 scheduler 或 webhook
 
 不在 V1 上 Redis / Celery。
 

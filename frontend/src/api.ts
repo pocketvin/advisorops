@@ -16,6 +16,12 @@ export interface Customer {
   risk_level: string;
   total_assets_band: string;
   investable_funds_band: string;
+  holdings_summary: string;
+  recent_login_at: string | null;
+  recent_trade_at: string | null;
+  asset_change_30d_pct: number;
+  recent_product_interest: string;
+  recent_consult_topic: string;
   relationship_stage: RelationshipStage;
   intent_level: IntentLevel;
   current_need: string;
@@ -25,6 +31,7 @@ export interface Customer {
   next_contact_at: string | null;
   cooldown_until: string | null;
   pinned: boolean;
+  manager_note: string;
   last_contact_at: string | null;
   recent_signal: string;
 }
@@ -85,10 +92,14 @@ export interface Workbench {
     completed_today: WorkItem[];
   };
   discovery: DiscoveryItem[];
+  demo_time: string;
 }
 
 export interface ActivityEvent {
   id: number;
+  customer_id: string;
+  name?: string;
+  source: string;
   activity_type: string;
   channel: string;
   occurred_at: string;
@@ -97,6 +108,28 @@ export interface ActivityEvent {
   customer_feedback: string;
   action_taken: string;
   next_step: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ProposedChange {
+  from: unknown;
+  to: unknown;
+  reason: string;
+}
+
+export interface ChangeProposal {
+  id: number;
+  customer_id: string;
+  customer_name?: string;
+  activity_id: number | null;
+  status: string;
+  source: string;
+  raw_content: string;
+  proposed_changes: Record<string, ProposedChange>;
+  extraction_summary: string;
+  confidence: number | null;
+  model: string | null;
+  created_at: string;
 }
 
 export interface CustomerDetail {
@@ -110,6 +143,13 @@ export interface CustomerDetail {
     new_value: string | null;
     changed_at: string;
   }>;
+  pending_proposals: ChangeProposal[];
+}
+
+export interface CustomerListItem {
+  customer: Customer;
+  active_work_item: WorkItem | null;
+  discovery: Discovery | null;
 }
 
 export interface InteractionPayload {
@@ -121,11 +161,81 @@ export interface InteractionPayload {
   intent_level: IntentLevel;
   current_need: string;
   current_obstacle: string;
+  manager_note: string;
   next_step: string;
   next_contact_at: string | null;
   channel: "phone" | "wecom" | "meeting" | "app" | "other";
   outcome: "completed" | "waiting";
   waiting_on: "none" | "customer" | "manager" | "internal" | "scheduled_time";
+  proposal_id?: number | null;
+}
+
+export interface AIExtraction {
+  proposal: ChangeProposal;
+  suggested_interaction: {
+    structured_summary: string;
+    customer_feedback: string;
+    relationship_stage: RelationshipStage;
+    intent_level: IntentLevel;
+    current_need: string;
+    current_obstacle: string;
+    next_step: string;
+    next_contact_at: string | null;
+    outcome: "completed" | "waiting";
+    waiting_on: InteractionPayload["waiting_on"];
+    reasoning_summary: string;
+    confidence: number;
+  };
+  usage: Record<string, number>;
+}
+
+export interface CustomerBrief {
+  summary: string;
+  main_focus: string;
+  current_obstacle: string;
+  unresolved_questions: string[];
+  next_conversation_focus: string;
+  model: string;
+  generated_at: string;
+}
+
+export interface ContextPack {
+  text: string;
+  included_fields: string[];
+  redacted_fields: string[];
+}
+
+export interface SyncState {
+  source: string;
+  cursor: number;
+  last_attempt_at: string | null;
+  last_success_at: string | null;
+  last_error: string;
+  last_result_count: number;
+}
+
+export interface ActivityFeed {
+  activities: ActivityEvent[];
+  pending_proposals: ChangeProposal[];
+  sync: {
+    sources: SyncState[];
+    configured_sources: string[];
+  };
+}
+
+export interface Meta {
+  product_name: string;
+  working_name: boolean;
+  positioning: string;
+  data_notice: string;
+  ai: {
+    configured: boolean;
+    model: string | null;
+    source: string;
+    base_url: string | null;
+  };
+  demo_time: string;
+  compliance: string[];
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -153,21 +263,110 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function queryString(
+  values: Record<string, string | number | undefined>,
+): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined || value === "") continue;
+    params.set(key, String(value));
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
 export const api = {
+  meta: () => request<Meta>("/api/meta"),
+
   workbench: () => request<Workbench>("/api/workbench"),
+
+  customers: (filters: {
+    search?: string;
+    stage?: string;
+    risk_level?: string;
+    intent?: string;
+    customer_level?: string;
+    total_assets_band?: string;
+    sort_by?: string;
+  }) =>
+    request<CustomerListItem[]>(
+      "/api/customers" + queryString(filters),
+    ),
 
   customer: (customerId: string) =>
     request<CustomerDetail>(`/api/customers/${customerId}`),
+
+  manualWork: (customerId: string) =>
+    request<WorkItem>(`/api/customers/${customerId}/manual-work`, {
+      method: "POST",
+    }),
+
+  setPin: (customerId: string, pinned: boolean) =>
+    request<Customer>(`/api/customers/${customerId}/pin`, {
+      method: "POST",
+      body: JSON.stringify({ pinned }),
+    }),
+
+  deferCustomer: (customerId: string, days = 3) =>
+    request<Customer>(`/api/customers/${customerId}/defer`, {
+      method: "POST",
+      body: JSON.stringify({ days }),
+    }),
 
   startWork: (customerId: string) =>
     request<WorkItem>(`/api/discovery/${customerId}/start`, {
       method: "POST",
     }),
 
+  aiExtract: (
+    customerId: string,
+    payload: { raw_content: string; channel: InteractionPayload["channel"] },
+  ) =>
+    request<AIExtraction>(`/api/customers/${customerId}/ai/extract`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  aiBrief: (customerId: string) =>
+    request<CustomerBrief>(`/api/customers/${customerId}/ai/brief`, {
+      method: "POST",
+    }),
+
+  contextPack: (customerId: string, question = "") =>
+    request<ContextPack>(`/api/customers/${customerId}/ai-context`, {
+      method: "POST",
+      body: JSON.stringify({ question }),
+    }),
+
   recordInteraction: (workItemId: number, payload: InteractionPayload) =>
     request(`/api/work-items/${workItemId}/interactions`, {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+
+  activityFeed: () => request<ActivityFeed>("/api/activities"),
+
+  refreshSources: () =>
+    request<{
+      refreshed_at: string;
+      new_count: number;
+      pending_proposals_created: number;
+    }>("/api/sync/refresh", { method: "POST" }),
+
+  applyProposal: (proposalId: number) =>
+    request(`/api/change-proposals/${proposalId}/apply`, {
+      method: "POST",
+    }),
+
+  rejectProposal: (proposalId: number) =>
+    request(`/api/change-proposals/${proposalId}/reject`, {
+      method: "POST",
+    }),
+
+  advanceDemoTime: (days: number, hours = 0) =>
+    request<{ demo_time: string; workbench: Workbench }>("/api/demo/time", {
+      method: "POST",
+      body: JSON.stringify({ days, hours }),
     }),
 
   resetDemo: () =>

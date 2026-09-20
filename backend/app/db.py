@@ -62,6 +62,12 @@ def init_db(db_path: Optional[PathLike] = None) -> None:
                 risk_level TEXT NOT NULL,
                 total_assets_band TEXT NOT NULL,
                 investable_funds_band TEXT NOT NULL,
+                holdings_summary TEXT NOT NULL DEFAULT '',
+                recent_login_at TEXT,
+                recent_trade_at TEXT,
+                asset_change_30d_pct REAL NOT NULL DEFAULT 0,
+                recent_product_interest TEXT NOT NULL DEFAULT '',
+                recent_consult_topic TEXT NOT NULL DEFAULT '',
                 relationship_stage TEXT NOT NULL,
                 intent_level TEXT NOT NULL,
                 current_need TEXT NOT NULL DEFAULT '',
@@ -71,6 +77,7 @@ def init_db(db_path: Optional[PathLike] = None) -> None:
                 next_contact_at TEXT,
                 cooldown_until TEXT,
                 pinned INTEGER NOT NULL DEFAULT 0,
+                manager_note TEXT NOT NULL DEFAULT '',
                 last_contact_at TEXT,
                 recent_signal TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
@@ -128,6 +135,63 @@ def init_db(db_path: Optional[PathLike] = None) -> None:
                 FOREIGN KEY(source_activity_id) REFERENCES activity_events(id)
             );
 
+            CREATE TABLE IF NOT EXISTS change_proposals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_id TEXT NOT NULL,
+                activity_id INTEGER,
+                status TEXT NOT NULL DEFAULT 'pending',
+                source TEXT NOT NULL,
+                raw_content TEXT NOT NULL DEFAULT '',
+                proposed_changes_json TEXT NOT NULL,
+                extraction_summary TEXT NOT NULL DEFAULT '',
+                confidence REAL,
+                model TEXT,
+                created_at TEXT NOT NULL,
+                reviewed_at TEXT,
+                applied_at TEXT,
+                reviewer_note TEXT NOT NULL DEFAULT '',
+                FOREIGN KEY(customer_id) REFERENCES customers(customer_id) ON DELETE CASCADE,
+                FOREIGN KEY(activity_id) REFERENCES activity_events(id) ON DELETE SET NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS sync_state (
+                source TEXT PRIMARY KEY,
+                cursor INTEGER NOT NULL DEFAULT 0,
+                last_attempt_at TEXT,
+                last_success_at TEXT,
+                last_error TEXT NOT NULL DEFAULT '',
+                last_result_count INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS external_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source TEXT NOT NULL,
+                source_event_id TEXT NOT NULL,
+                sequence_number INTEGER NOT NULL,
+                customer_id TEXT NOT NULL,
+                channel TEXT NOT NULL,
+                event_kind TEXT NOT NULL,
+                occurred_at TEXT NOT NULL,
+                raw_content TEXT NOT NULL,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                UNIQUE(source, source_event_id),
+                FOREIGN KEY(customer_id) REFERENCES customers(customer_id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS ingested_external_events (
+                source TEXT NOT NULL,
+                source_event_id TEXT NOT NULL,
+                activity_id INTEGER NOT NULL,
+                ingested_at TEXT NOT NULL,
+                PRIMARY KEY(source, source_event_id),
+                FOREIGN KEY(activity_id) REFERENCES activity_events(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS demo_state (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_customers_next_contact
               ON customers(next_contact_at);
             CREATE INDEX IF NOT EXISTS idx_activity_customer_time
@@ -136,5 +200,29 @@ def init_db(db_path: Optional[PathLike] = None) -> None:
               ON work_items(customer_id, status);
             CREATE INDEX IF NOT EXISTS idx_work_status
               ON work_items(status);
+            CREATE INDEX IF NOT EXISTS idx_proposals_customer_status
+              ON change_proposals(customer_id, status);
+            CREATE INDEX IF NOT EXISTS idx_external_source_sequence
+              ON external_events(source, sequence_number);
             """
         )
+
+        # Forward-compatible additive migration for the rebuildable V1 demo DB.
+        current_columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(customers)").fetchall()
+        }
+        additions = {
+            "holdings_summary": "TEXT NOT NULL DEFAULT ''",
+            "recent_login_at": "TEXT",
+            "recent_trade_at": "TEXT",
+            "asset_change_30d_pct": "REAL NOT NULL DEFAULT 0",
+            "recent_product_interest": "TEXT NOT NULL DEFAULT ''",
+            "recent_consult_topic": "TEXT NOT NULL DEFAULT ''",
+            "manager_note": "TEXT NOT NULL DEFAULT ''",
+        }
+        for name, definition in additions.items():
+            if name not in current_columns:
+                conn.execute(
+                    f"ALTER TABLE customers ADD COLUMN {name} {definition}"
+                )

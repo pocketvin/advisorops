@@ -1,81 +1,62 @@
-# 实施计划
+# 实施计划与 V1 状态
 
-## 总原则
+更新：2026-09-20
 
-先做完整 vertical slice，再扩数据和功能。
+## 当前结论
 
-不按“先把整个后端写完 → 再写前端”的方式推进。
+V1 已完成到“可本地运行、可演示、可继续真机体验修改”的状态。
 
-每个阶段都必须能运行、能演示、能测试。
+完成的主链：
 
-## 当前进度（2026-09-20）
+```text
+客户动态 / 人工记录
+→ 完整 Activity
+→ AI / 规则理解
+→ Change Proposal
+→ 人工确认
+→ Customer Snapshot
+→ 发现区
+→ WorkItem
+→ 工作区
+→ 记录沟通
+→ 状态更新
+→ 未来到期后重新发现
+```
 
-- Phase 0：已完成。
-- Phase 1：进行中。
-  - 后端领域闭环：已完成，当前 13 条状态/数据库测试通过。
-  - FastAPI API 烟测：已通过。
-  - React 工作台源码：已完成第一版。
-  - 前端真实依赖环境 typecheck / build / 浏览器联调：待项目依赖同步后执行。
-  - 当前不接 AI 自动抽取，先由人工确认结构化字段。
+## Phase 0：产品与架构规划 — 完成
 
-Phase 1 完成前不进入 Phase 2/3。
-
-## Phase 0：规划冻结
-
-本阶段目标：
-
-- 产品定位
-- 工作区 / 发现区
-- 核心数据对象
-- AI 边界
-- 数据接入策略
-- 技术选型
-- Demo 主线
+- 工作区 / 发现区分离
+- Relationship Stage / Follow-up State / Work State 分离
+- AI 写入边界
+- Connector + cursor 同步思路
+- Snapshot + Activity + WorkItem + ChangeProposal 数据模型
 - Git / GitHub 约定
 
-完成标准：
+## Phase 1：最小完整闭环 — 完成
 
-- 文档不存在互相冲突
-- 不再使用“单一客户状态解决所有问题”
-- 不再使用“所有客户统一强行打分”
-- 不再把人工置顶写成普通分数项
-- 不把 AI 直接写解释性客户字段作为默认行为
+- 发现区出现客户
+- 可解释排序原因
+- 开始跟进
+- 进入工作区
+- 完整原始沟通记录
+- 结构化经营字段
+- 人工确认
+- Activity + Snapshot + WorkItem 原子更新
+- Timeline 与 Field Change Audit
 
-## Phase 1：单客户闭环
-
-只用 1～3 个固定客户。
-
-跑通：
-
-1. 发现区出现客户
-2. 显示为什么值得处理
-3. 开始跟进
-4. 进入工作区
-5. 记录自然语言沟通
-6. 结构化 Preview
-7. 人工确认
-8. Activity + Snapshot + WorkItem 同步更新
-9. 客户离开今天待处理
-10. 时间线完整可复盘
-
-必须先测业务状态，再做视觉 polish。
-
-## Phase 2：时间回流
-
-跑通：
+## Phase 2：时间回流 — 完成
 
 - 再考虑 3 天
-- 未到期不出现
-- 到期进入发现区
-- 逾期紧迫度上升
-- 明确拒绝进入 cooldown
-- cooldown 后仅允许服务复核
+- 未到期抑制
+- 到期回流
+- 逾期紧迫度
+- 明确拒绝 30 天 cooldown
+- cooldown 后低打扰服务复核
+- 可注入 / 可推进 Demo Clock
 
-测试使用可注入 clock，不等待真实三天。
+## Phase 3：客户动态与同步 — 完成
 
-## Phase 3：客户动态与同步
-
-实现 Mock Connectors：
+V1 Mock 来源：
 
 - Mock CRM
 - Mock WeCom
@@ -83,134 +64,136 @@ Phase 1 完成前不进入 Phase 2/3。
 
 实现：
 
-- 手动刷新
+- 主动刷新
 - incremental cursor
-- idempotency
-- 单来源失败隔离
-- Change Proposal
-- 最近同步时间
+- `(source, source_event_id)` 幂等
+- 单来源错误状态
+- SyncState
+- 完整 Activity
+- Kimi Change Proposal
+- pending / apply / reject
 
-此时再评估是否加入单实例 APScheduler 做 10 分钟级自动演示同步。
+V1 **不加入 APScheduler**。原因：求职 Demo 并不需要持续后台服务；手动刷新可以更清楚展示数据同步机制，真实机构落地再按部署方式选择调度器或 webhook。
 
-## Phase 4：40 个固定模拟客户
+## Phase 4：固定模拟客户 — 完成
 
-不是 Faker 随机堆数据。
+40 个固定客户，覆盖：
 
-预设：
-
-- 到期
-- 逾期
-- 刚联系无需重复
+- 到期 / 逾期
+- 刚联系无需重复触达
 - 考虑中未到期
-- 明确拒绝
+- 明确拒绝 / 冷静期
 - 行为变化
-- 工作区等待反馈
+- 工作区待处理
+- 等待客户
+- 等待内部资料
+- 今日已完成
 - 人工置顶
 - 长期沉默
-- 已完成今日动作
 
-确保 Demo 每次重置后顺序稳定。
+不使用随机 Faker 决定核心演示场景。
 
-## Phase 5：完整前端
+## Phase 5：完整前端 — 完成
 
-完成：
+主入口：
 
 - 今日工作台
-- 客户列表
-- 客户详情
-- 时间线
+- 全部客户
 - 客户动态
-- 状态变化确认
-- 筛选 / 搜索
+
+已实现：
+
+- 工作区 / 发现区
+- 搜索 / 状态 / 风险 / 意向 / 资产筛选
+- 当前优先级 / 最近联系 / 姓名排序
+- 客户详情 Drawer
+- Activity Timeline
+- Field Change Audit
+- pending AI Proposal
+- 人工置顶
+- 3 天后再看
+- 任意客户手工记录动态
+- 明确拒绝 / 再考虑快捷模板
 - Reset Demo
+- Demo Clock
+- loading / error / empty state
 
-再进行：
+## Phase 6：AI V1 — 完成
 
-- 动画
-- 排序变化反馈
-- 视觉层级
-- 空状态
-- loading / error
+模型：本机已有 **Kimi K3**。
 
-## Phase 6：AI V1
+实现：
 
-顺序：
+- 沟通自然语言 → 结构化候选字段
+- JSON Schema 输出 + 容错解析 + 有界重试
+- 模型失败可手工继续
+- 客户 30 秒摘要
+- 外部企业微信消息 → Change Proposal
+- AI Context Pack
+- Context Pack 默认脱敏
 
-### 6.1 沟通记录结构化
+没有做“AI 黑盒 Priority”。发现和排序仍由确定性规则控制。
 
-最高优先级。
+NBA 文案仍以规则为主，刻意没有每次都额外调用 Kimi，以降低延迟、费用和不稳定性。
 
-输入自然语言，输出：
+## Phase 7：质量收敛 — 完成
 
-- 结构化经营摘要
-- 客户反馈
-- need
-- obstacle
-- stage proposal
-- intent proposal
-- next step
-- next contact
+后端覆盖：
 
-人工确认。
+- SQLite WAL / foreign keys
+- legacy demo schema rebuild
+- active WorkItem 去重
+- completed_today 当日抑制
+- recent contact suppression
+- new signal exception
+- due / overdue
+- defer
+- rejected cooldown 与恢复
+- pin 不污染 score
+- AI Proposal 未确认不改 Snapshot
+- apply Proposal 写 audit
+- Sync cursor / idempotency
+- 40 客户固定 seed
+- Context Pack 脱敏
+- 客户筛选 / 排序
 
-### 6.2 客户 30 秒摘要
+前端：
 
-由最近若干 Activity + Snapshot 生成。
+- TypeScript strict typecheck
+- Vite production build
+- 实际后端联调
+- 浏览器人工走查
 
-### 6.3 NBA 文案增强
+## Phase 8：GitHub 工程准备 — 完成（未创建远端）
 
-规则决定动作类型，AI 只负责结合上下文写得具体。
+已加入：
 
-### 6.4 AI 咨询上下文
+- `backend/uv.lock`
+- `frontend/package-lock.json`
+- GitHub Actions backend / frontend CI
+- Dependabot：uv / npm / GitHub Actions
+- Secret / local DB ignore
 
-脱敏、预览、复制。
+暂未执行：
 
-## Phase 7：质量收敛
+- 创建 GitHub remote
+- push
+- 公开仓库
+- 部署公开 Demo
 
-### 后端核心测试
+原因：最终项目名称和仓库公开策略尚未由用户确定，且没有 push / 发布授权。
 
-- duplicate event 不重复写入
-- sync failure 不推进 cursor
-- active WorkItem 不重复进入发现区
-- completed_today 当日不重新发现
-- recent contact + no new reason 被抑制
-- due follow-up 正常进入
-- rejected cooldown 正常生效
-- AI proposal 未确认不修改 Snapshot
-- apply proposal 写 audit
-- AI 失败仍可手工保存 Activity
+## 后续不是“补 V1”，而是体验优化
 
-### 前端
+下一轮应以用户实际体验反馈为主，例如：
 
-- mutation 后相关 query 正确 invalidate
-- 工作区/发现区不会重复显示同客户
-- 刷新状态清晰
-- 表单失败不丢原始记录
+- 首页信息密度
+- 卡片字段取舍
+- 动效与交互手感
+- AI 提取字段是否符合真实沟通习惯
+- Priority 权重是否符合实际客户经理判断
+- 客户动态是否需要自动轮询
+- 最终项目命名
+- 面试演示脚本和截图
 
-## Phase 8：GitHub / Demo 发布
-
-代码稳定后：
-
-- 生成 dependency lock files
-- 添加 GitHub Actions
-  - backend tests
-  - frontend build / tests
-- Dependabot
-- SECURITY.md
-- README 演示截图
-- 架构图
-- Demo 数据声明
-- 部署 Demo
-
-不在 lock file 和测试命令稳定前提交一个必然失败的 CI。
-
-## 不做的提前优化
-
-在以下条件出现前不引入：
-
-- Redis：单机缓存/状态明显不够
-- Celery / 队列：真实后台任务需要独立可靠执行
-- PostgreSQL：多人/部署/并发需求出现
-- WebSocket：轮询和 query invalidation 已无法满足
-- RAG：存在真实大规模非结构化资料检索需求
-- Agent：存在明确需要自主多步工具执行的任务
+不应在没有真实需求前引入 Redis、Celery、Kafka、RAG、Agent、微服务或机器学习转化率模型。

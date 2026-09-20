@@ -1,10 +1,19 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from .schemas import InteractionRequest
+from .ai_client import KimiError, KimiUnavailableError
+from .schemas import (
+    AIExtractRequest,
+    ContextPackRequest,
+    DeferRequest,
+    DemoTimeRequest,
+    InteractionRequest,
+    PinRequest,
+)
 from .service import (
     CustomerNotFoundError,
     InvalidWorkStateError,
+    ProposalNotFoundError,
     WorkbenchService,
     WorkItemNotFoundError,
 )
@@ -12,7 +21,7 @@ from .service import (
 
 app = FastAPI(
     title="证券客户经营工作台 API",
-    version="0.2.0",
+    version="0.5.0",
     description="仅使用模拟数据的客户经营工作流原型。",
 )
 
@@ -28,10 +37,21 @@ service = WorkbenchService()
 
 
 def _http_error(exc: Exception) -> HTTPException:
-    if isinstance(exc, (CustomerNotFoundError, WorkItemNotFoundError)):
+    if isinstance(
+        exc,
+        (
+            CustomerNotFoundError,
+            WorkItemNotFoundError,
+            ProposalNotFoundError,
+        ),
+    ):
         return HTTPException(status_code=404, detail="目标记录不存在")
     if isinstance(exc, InvalidWorkStateError):
         return HTTPException(status_code=409, detail=str(exc))
+    if isinstance(exc, KimiUnavailableError):
+        return HTTPException(status_code=503, detail="Kimi K3 尚未配置")
+    if isinstance(exc, KimiError):
+        return HTTPException(status_code=502, detail=str(exc))
     if isinstance(exc, ValueError):
         return HTTPException(status_code=422, detail=str(exc))
     return HTTPException(status_code=500, detail="未处理的服务错误")
@@ -41,26 +61,14 @@ def _http_error(exc: Exception) -> HTTPException:
 def health():
     return {
         "status": "ok",
-        "mode": "phase-1-demo",
+        "mode": "demo",
         "data": "simulated",
     }
 
 
 @app.get("/api/meta")
 def meta():
-    return {
-        "product_name": "客户经营工作台",
-        "working_name": True,
-        "positioning": "证券客户经理日常客户经营辅助原型",
-        "data_notice": "全部客户均为模拟数据，不连接任何券商内部系统。",
-        "ai_status": "本阶段尚未接 AI；结构化字段由客户经理确认。",
-        "compliance": [
-            "发现区优先级仅用于安排客户经理工作顺序",
-            "涉及具体产品时仍需遵循真实机构适当性流程",
-            "客户状态变化保留人工确认与活动记录",
-            "不自动发送金融建议，不自动替客户做投资决策",
-        ],
-    }
+    return service.meta()
 
 
 @app.get("/api/workbench")
@@ -68,10 +76,55 @@ def workbench():
     return service.workbench()
 
 
+@app.get("/api/customers")
+def customers(
+    search: str = "",
+    stage: str = "",
+    risk_level: str = "",
+    intent: str = "",
+    customer_level: str = "",
+    total_assets_band: str = "",
+    sort_by: str = "priority",
+):
+    return service.customers(
+        search=search,
+        stage=stage,
+        risk_level=risk_level,
+        intent=intent,
+        customer_level=customer_level,
+        total_assets_band=total_assets_band,
+        sort_by=sort_by,
+    )
+
+
 @app.get("/api/customers/{customer_id}")
 def customer_detail(customer_id: str):
     try:
         return service.customer_detail(customer_id)
+    except Exception as exc:
+        raise _http_error(exc)
+
+
+@app.post("/api/customers/{customer_id}/manual-work")
+def manual_work(customer_id: str):
+    try:
+        return service.ensure_manual_work(customer_id)
+    except Exception as exc:
+        raise _http_error(exc)
+
+
+@app.post("/api/customers/{customer_id}/pin")
+def pin_customer(customer_id: str, payload: PinRequest):
+    try:
+        return service.set_pin(customer_id, payload.pinned)
+    except Exception as exc:
+        raise _http_error(exc)
+
+
+@app.post("/api/customers/{customer_id}/defer")
+def defer_customer(customer_id: str, payload: DeferRequest):
+    try:
+        return service.defer_customer(customer_id, payload.days)
     except Exception as exc:
         raise _http_error(exc)
 
@@ -84,12 +137,79 @@ def start_work(customer_id: str):
         raise _http_error(exc)
 
 
+@app.post("/api/customers/{customer_id}/ai/extract")
+def ai_extract(customer_id: str, payload: AIExtractRequest):
+    try:
+        return service.ai_extract_interaction(
+            customer_id,
+            raw_content=payload.raw_content,
+            channel=payload.channel,
+        )
+    except Exception as exc:
+        raise _http_error(exc)
+
+
+@app.post("/api/customers/{customer_id}/ai/brief")
+def ai_brief(customer_id: str):
+    try:
+        return service.ai_customer_brief(customer_id)
+    except Exception as exc:
+        raise _http_error(exc)
+
+
+@app.post("/api/customers/{customer_id}/ai-context")
+def ai_context(customer_id: str, payload: ContextPackRequest):
+    try:
+        return service.ai_context(
+            customer_id,
+            question=payload.question,
+        )
+    except Exception as exc:
+        raise _http_error(exc)
+
+
 @app.post("/api/work-items/{work_item_id}/interactions")
 def record_interaction(work_item_id: int, payload: InteractionRequest):
     try:
         return service.record_interaction(work_item_id, payload.model_dump())
     except Exception as exc:
         raise _http_error(exc)
+
+
+@app.get("/api/activities")
+def activity_feed(limit: int = Query(default=50, ge=1, le=100)):
+    return service.activity_feed(limit=limit)
+
+
+@app.post("/api/change-proposals/{proposal_id}/apply")
+def apply_proposal(proposal_id: int):
+    try:
+        return service.apply_change_proposal(proposal_id)
+    except Exception as exc:
+        raise _http_error(exc)
+
+
+@app.post("/api/change-proposals/{proposal_id}/reject")
+def reject_proposal(proposal_id: int):
+    try:
+        return service.reject_change_proposal(proposal_id)
+    except Exception as exc:
+        raise _http_error(exc)
+
+
+@app.get("/api/sync/status")
+def sync_status():
+    return service.sync_status()
+
+
+@app.post("/api/sync/refresh")
+def sync_refresh():
+    return service.refresh_sources()
+
+
+@app.post("/api/demo/time")
+def demo_time(payload: DemoTimeRequest):
+    return service.advance_demo_time(days=payload.days, hours=payload.hours)
 
 
 @app.post("/api/demo/reset")

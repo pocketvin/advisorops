@@ -63,7 +63,7 @@ def _add(
 
 
 def _level(score: int) -> str:
-    if score >= 70:
+    if score >= 65:
         return "high"
     if score >= 45:
         return "medium"
@@ -81,6 +81,10 @@ def evaluate_discovery(
     if cooldown_until is not None and cooldown_until > current:
         return None
 
+    stage = customer.get("relationship_stage") or "new"
+    intent = customer.get("intent_level") or "unknown"
+    pinned = bool(customer.get("pinned"))
+
     next_contact_hours = _hours_until(customer.get("next_contact_at"), current)
     last_contact_days = _days_since(customer.get("last_contact_at"), current)
 
@@ -89,7 +93,23 @@ def evaluate_discovery(
     suggested_action = ""
     primary_action_code = ""
 
-    if next_contact_hours is not None:
+    if (
+        stage == "rejected"
+        and cooldown_until is not None
+        and cooldown_until <= current
+    ):
+        follow_up_state = "due"
+        actionable_reason = "触达冷静期已结束，可以进行低打扰服务复核"
+        suggested_action = "先做低打扰服务回访，确认客户近期需求是否发生变化；不要直接进入产品推介。"
+        primary_action_code = "service_review_after_cooldown"
+        _add(
+            factors,
+            primary_action_code,
+            "冷静期结束",
+            18,
+            "已到可重新进行服务关系复核的时间",
+        )
+    elif next_contact_hours is not None:
         if next_contact_hours <= -24:
             follow_up_state = "overdue"
             overdue_days = max(1, int(abs(next_contact_hours) // 24))
@@ -119,7 +139,7 @@ def evaluate_discovery(
             follow_up_state = "scheduled"
 
     recent_signal = (customer.get("recent_signal") or "").strip()
-    if recent_signal:
+    if recent_signal and stage != "rejected":
         if not actionable_reason:
             actionable_reason = "出现新的客户经营信号"
             suggested_action = "先核实新信号背后的真实需求，再决定后续沟通。"
@@ -132,10 +152,6 @@ def evaluate_discovery(
             recent_signal,
         )
 
-    stage = customer.get("relationship_stage") or "new"
-    intent = customer.get("intent_level") or "unknown"
-    pinned = bool(customer.get("pinned"))
-
     if pinned and not actionable_reason:
         actionable_reason = "客户经理已主动标记为当前关注对象"
         suggested_action = customer.get("next_step") or "确认当前进展并推进下一步。"
@@ -145,15 +161,19 @@ def evaluate_discovery(
         not actionable_reason
         and stage == "interested"
         and intent == "high"
-        and not customer.get("next_contact_at")
+        and next_contact_hours is None
     ):
-        actionable_reason = "客户意向较高，但当前没有明确的下一步安排"
-        suggested_action = customer.get("next_step") or "补齐下一步动作和明确跟进时间。"
-        primary_action_code = "missing_next_action"
+        actionable_reason = "客户意向较高，但当前没有明确的下一次联系时间"
+        suggested_action = (
+            customer.get("next_step")
+            if customer.get("next_step") and customer.get("next_step") != "按当前经营节奏继续跟进"
+            else "明确下一步动作，并约定下一次联系时间。"
+        )
+        primary_action_code = "missing_follow_up_time"
         _add(
             factors,
             primary_action_code,
-            "高意向但缺少下一步",
+            "高意向但缺少跟进时间",
             24,
             actionable_reason,
         )

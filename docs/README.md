@@ -1,23 +1,24 @@
 # 项目文档索引
 
-当前阶段：**Phase 1 单客户闭环施工**。规划已冻结，当前只实现发现区 → 工作区 → 记录沟通 → 状态更新 → 今日完成 / 等待中的最小完整链路。
+当前阶段：**V1 已实现，进入用户体验测试与迭代。**
 
-## 唯一事实源
+## 事实源
 
-- `PRODUCT-MODEL.md`：产品定位、工作区/发现区、AI 职责、边界和验收目标。
-- `ARCHITECTURE.md`：技术架构、模块边界、数据接入、同步方式和技术选型。
-- `FLOWS.md`：客户动态、发现、执行、记录、回流、AI 咨询上下文的端到端流程。
+- `PRODUCT-MODEL.md`：产品定位、工作区 / 发现区、AI 职责与边界。
+- `ARCHITECTURE.md`：技术架构、模块边界、同步与数据访问。
+- `FLOWS.md`：客户动态、发现、执行、记录、回流、AI Context 的端到端流程。
 - `DATA-MODEL.md`：核心实体、字段职责和状态约束。
-- `IMPLEMENTATION-PLAN.md`：分阶段施工与验证顺序。
-- `DEMO-SCENARIOS.md`：面试演示脚本。
-- `RESEARCH-NOTES.md`：外部资料与设计依据。
-- `REPOSITORY-GUIDE.md`：Git / GitHub 约定与后续 CI 准备。
+- `IMPLEMENTATION-PLAN.md`：V1 已完成内容与后续方向。
+- `DEMO-SCENARIOS.md`：面试演示主线。
+- `RESEARCH-NOTES.md`：外部调研与技术选择依据。
+- `REPOSITORY-GUIDE.md`：Git / GitHub / CI / Secrets 约定。
 
-## 文档原则
+## 当前工程原则
 
-1. 项目不虚构已接入中信证券或任何券商内部系统。
-2. V1 全部客户数据使用模拟数据。
-3. 客户当前状态必须能追溯到完整活动记录，不能只保存 AI 抽取后的少数字段。
-4. AI 负责理解、整理和辅助建议；确定性规则负责关键业务约束；客户经理保留最终确认。
-5. 优先采用成熟、轻量方案，不提前引入微服务、消息队列、Redis、Celery、向量数据库或复杂 Agent。
-6. Phase 1 暂不接 AI 自动抽取；先用“原始记录 + 人工确认结构化字段”验证 Activity、Snapshot、WorkItem 和审计逻辑。
+1. 不虚构已接入中信证券或任何券商内部系统。
+2. V1 全部客户数据为固定模拟数据。
+3. Customer Snapshot 必须能追溯到完整 Activity。
+4. AI 负责理解和候选建议；确定性规则负责关键约束；客户经理保留最终确认。
+5. 权威事实与 AI 解释性字段严格区分。
+6. Kimi K3 失败时不阻塞手工记录。
+7. 优先轻量成熟方案，不提前引入微服务、消息队列、Redis、Celery、向量数据库或复杂 Agent。

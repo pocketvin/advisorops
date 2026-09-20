@@ -2,9 +2,9 @@
 
 ## Current phase
 
-This project is currently implementing Phase 1: the smallest complete discovery → work area → interaction → completion loop.
+V1 is implemented and is now in user experience testing / iteration.
 
-The docs under `docs/` remain the architecture source of truth. Phase 1 code must stay inside the approved scope: fixed simulated customers, deterministic discovery rules, complete Activity history, WorkItem state, and human-confirmed interaction updates. Do not jump ahead to real connectors or AI extraction unless the user explicitly advances the phase.
+The docs under `docs/` remain the architecture source of truth. Preserve the completed V1 boundaries: simulated customers, deterministic Discovery/Priority rules, complete Activity history, WorkItem state, human-confirmed AI Change Proposals, and no implication of real brokerage-system integration.
 
 ## Product goal
 
@@ -45,7 +45,7 @@ AI must not silently overwrite authority-owned customer facts.
 - Backend: Python + FastAPI.
 - Models/data access: Python sqlite3 + a thin repository layer for V1.
 - Data: SQLite with WAL for V1.
-- Tests: pytest plus frontend unit/component tests when implementation begins.
+- Validation: pytest, TypeScript typecheck, production build, API/live-browser smoke.
 - Keep rule logic framework-independent and unit-testable.
 
 Do not introduce Redis, Celery, Kafka, vector databases, microservices, or autonomous agent infrastructure without a concrete demonstrated need.

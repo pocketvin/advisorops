@@ -71,24 +71,23 @@ git diff --check
 
 GitHub CI 应使用 lock file 做可重复安装。
 
-## CI 计划
+## CI
 
-等 Phase 1 有真实测试、前端入口完整后加入：
+已加入 `.github/workflows/ci.yml`：
 
 ### backend
 
 - uv sync --frozen
+- compileall
 - pytest
-- 可选 ruff
 
 ### frontend
 
 - npm ci
 - typecheck
-- test
-- build
+- production build
 
-当前不提交一个必然失败的 CI workflow。
+CI 不依赖真实 Kimi Key；模型相关测试使用 Fake Kimi，避免 CI 消费外部额度。
 
 ## GitHub 安全准备
 
@@ -97,8 +96,8 @@ GitHub CI 应使用 lock file 做可重复安装。
 - 首选先 private
 - 确认无真实客户信息后再考虑 public
 - 开启 secret scanning / push protection（若账户能力可用）
-- 增加 Dependabot
-- 增加 SECURITY.md
+- Dependabot 已配置（uv / npm / GitHub Actions）
+- SECURITY.md 已加入
 - CI 只使用仓库 secrets，不写明文凭证
 
 ## 发布前公开检查

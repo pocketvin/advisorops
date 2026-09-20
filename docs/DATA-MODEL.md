@@ -36,8 +36,13 @@ Demo 仅使用模拟信息：
 - total_assets_band
 - holdings_summary
 - investable_funds_band
+- recent_login_at
+- recent_trade_at
+- asset_change_30d_pct
+- recent_product_interest
+- recent_consult_topic
 
-真实企业环境中，这类字段应由权威系统同步，不由 AI 改写。
+这些是确定事实字段。真实企业环境中应由权威系统/获批数据源同步，不由 AI 改写。
 
 ### 当前经营状态
 
@@ -50,7 +55,7 @@ Demo 仅使用模拟信息：
 - next_contact_at
 - cooldown_until
 - pinned
-- manager_note
+- manager_note（人工字段，AI 不自动修改）
 
 ### 派生字段
 
@@ -198,7 +203,7 @@ V1 可选择不单独持久化 Candidate，而是动态计算。
 - status
 - proposed_changes_json
 - extraction_summary
-- confidence_json
+- confidence
 - created_at
 - reviewed_at
 - applied_at
