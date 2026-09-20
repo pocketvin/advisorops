@@ -410,8 +410,11 @@ active WorkItem
 
 ### 结束跟进
 
+入口位于“记录进展”内部，而不是工作区卡片的平级动作。没有新沟通时可以直接结束；有沟通内容时通过“记录后结束本轮”完成。
+
 ```text
 active WorkItem
+→ 进入记录进展
 → 用户确认结束
 → WorkItem.status = completed_today
 → 写入 work_completed Activity

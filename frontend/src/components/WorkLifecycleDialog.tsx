@@ -25,7 +25,7 @@ export default function WorkLifecycleDialog({
         className="mini-dialog work-lifecycle-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label={cancelling ? "取消跟进" : "结束跟进"}
+        aria-label={cancelling ? "取消跟进" : "结束本轮跟进"}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="mini-dialog-head">
@@ -84,7 +84,7 @@ export default function WorkLifecycleDialog({
                 : "正在结束…"
               : cancelling
                 ? "确认取消跟进"
-                : "确认结束跟进"}
+                : "确认结束本轮"}
           </button>
         </div>
       </section>

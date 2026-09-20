@@ -60,7 +60,6 @@ function WorkCard({
   onRecord,
   onDetail,
   onCancel,
-  onComplete,
   lifecyclePending,
 }: {
   item: WorkItem;
@@ -68,7 +67,6 @@ function WorkCard({
   onRecord: () => void;
   onDetail: () => void;
   onCancel: () => void;
-  onComplete: () => void;
   lifecyclePending: boolean;
 }) {
   return (
@@ -127,13 +125,6 @@ function WorkCard({
             disabled={lifecyclePending}
           >
             取消跟进
-          </button>
-          <button
-            className="button secondary compact"
-            onClick={onComplete}
-            disabled={lifecyclePending}
-          >
-            结束跟进
           </button>
           <button
             className="button primary compact"
@@ -246,7 +237,7 @@ export default function WorkbenchView({ onOpenCustomer, onRecordWork }: Props) {
   const [deferTarget, setDeferTarget] = useState<{ customerId: string; name: string } | null>(null);
   const [lifecycleTarget, setLifecycleTarget] = useState<{
     item: WorkItem;
-    mode: "cancel" | "complete";
+    mode: "cancel";
   } | null>(null);
   const workbenchQuery = useQuery({
     queryKey: ["workbench"],
@@ -274,12 +265,8 @@ export default function WorkbenchView({ onOpenCustomer, onRecordWork }: Props) {
       mode,
     }: {
       item: WorkItem;
-      mode: "cancel" | "complete";
-    }) => {
-      return mode === "cancel"
-        ? api.cancelWork(item.id)
-        : api.completeWork(item.id);
-    },
+      mode: "cancel";
+    }) => api.cancelWork(item.id),
     onSuccess: async (result) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["workbench"] }),
@@ -398,9 +385,6 @@ export default function WorkbenchView({ onOpenCustomer, onRecordWork }: Props) {
                     onCancel={() =>
                       setLifecycleTarget({ item, mode: "cancel" })
                     }
-                    onComplete={() =>
-                      setLifecycleTarget({ item, mode: "complete" })
-                    }
                     lifecyclePending={
                       lifecycleMutation.isPending &&
                       lifecycleMutation.variables?.item.id === item.id
@@ -425,9 +409,6 @@ export default function WorkbenchView({ onOpenCustomer, onRecordWork }: Props) {
                     onRecord={() => onRecordWork(item.id, item.customer_id)}
                     onCancel={() =>
                       setLifecycleTarget({ item, mode: "cancel" })
-                    }
-                    onComplete={() =>
-                      setLifecycleTarget({ item, mode: "complete" })
                     }
                     lifecyclePending={
                       lifecycleMutation.isPending &&

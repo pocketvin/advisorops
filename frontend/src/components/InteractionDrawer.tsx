@@ -9,6 +9,7 @@ import {
   type RelationshipStage,
 } from "../api";
 import ImageAttachmentPicker from "./ImageAttachmentPicker";
+import WorkLifecycleDialog from "./WorkLifecycleDialog";
 
 interface Props {
   workItemId: number;
@@ -95,6 +96,7 @@ export default function InteractionDrawer({
   const [proposalId, setProposalId] = useState<number | null>(null);
   const [reviewReady, setReviewReady] = useState(false);
   const [confidence, setConfidence] = useState<number | null>(null);
+  const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!customer) return;
@@ -141,6 +143,20 @@ export default function InteractionDrawer({
       );
       setConfidence(suggestion.confidence);
       setReviewReady(true);
+    },
+  });
+
+  const completeMutation = useMutation({
+    mutationFn: () => api.completeWork(workItemId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workbench"] }),
+        queryClient.invalidateQueries({ queryKey: ["customer", customerId] }),
+        queryClient.invalidateQueries({ queryKey: ["activities"] }),
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
+      ]);
+      setCompleteConfirmOpen(false);
+      onClose();
     },
   });
 
@@ -323,7 +339,9 @@ export default function InteractionDrawer({
                   </div>
                   <div>
                     <span>结果</span>
-                    <strong>{outcome === "waiting" ? "继续等待" : "本次完成"}</strong>
+                    <strong>
+                      {outcome === "waiting" ? "记录后继续等待" : "记录后结束本轮"}
+                    </strong>
                   </div>
                 </div>
               </section>
@@ -424,8 +442,8 @@ export default function InteractionDrawer({
                         setWaitingOn("none");
                       }}
                     >
-                      <strong>本次已完成</strong>
-                      <span>退出当前工作项</span>
+                      <strong>记录后结束本轮</strong>
+                      <span>保存这次沟通，并进入今日完成</span>
                     </button>
                     <button
                       type="button"
@@ -435,8 +453,8 @@ export default function InteractionDrawer({
                         if (waitingOn === "none") setWaitingOn("customer");
                       }}
                     >
-                      <strong>继续等待</strong>
-                      <span>继续留在工作区</span>
+                      <strong>记录后继续等待</strong>
+                      <span>保存这次沟通，并继续留在工作区</span>
                     </button>
                   </div>
 
@@ -466,20 +484,56 @@ export default function InteractionDrawer({
           {mutation.error && (
             <div className="error-banner">{mutation.error.message}</div>
           )}
+          {completeMutation.error && (
+            <div className="error-banner">{completeMutation.error.message}</div>
+          )}
 
           <footer className="form-actions progress-form-actions">
-            <button type="button" className="button secondary" onClick={onClose}>
-              取消
-            </button>
-            <button
-              type="submit"
-              className="button primary"
-              disabled={!reviewReady || !summary.trim() || mutation.isPending}
-            >
-              {mutation.isPending ? "正在保存…" : "确认记录"}
-            </button>
+            <div className="progress-terminal-action">
+              <button
+                type="button"
+                className="button secondary"
+                disabled={completeMutation.isPending || mutation.isPending}
+                onClick={() => setCompleteConfirmOpen(true)}
+              >
+                结束本轮跟进
+              </button>
+              <span>没有新的沟通需要记录时，可以直接结束今天这一轮。</span>
+            </div>
+            <div className="progress-save-actions">
+              <button
+                type="button"
+                className="button ghost"
+                onClick={onClose}
+                disabled={completeMutation.isPending || mutation.isPending}
+              >
+                返回
+              </button>
+              <button
+                type="submit"
+                className="button primary"
+                disabled={
+                  !reviewReady ||
+                  !summary.trim() ||
+                  mutation.isPending ||
+                  completeMutation.isPending
+                }
+              >
+                {mutation.isPending ? "正在保存…" : "确认记录"}
+              </button>
+            </div>
           </footer>
         </form>
+
+        {completeConfirmOpen && (
+          <WorkLifecycleDialog
+            mode="complete"
+            customerName={customer?.name ?? customerId}
+            pending={completeMutation.isPending}
+            onClose={() => setCompleteConfirmOpen(false)}
+            onConfirm={() => completeMutation.mutate()}
+          />
+        )}
       </aside>
     </div>
   );

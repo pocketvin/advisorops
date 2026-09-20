@@ -3501,3 +3501,44 @@ details.panorama-card > .section-title-row {
     justify-content: flex-start;
   }
 }
+
+
+/* Progress drawer terminal action */
+.progress-form-actions {
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.progress-terminal-action {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.progress-terminal-action > span {
+  max-width: 330px;
+  color: #8994a8;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.progress-save-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 760px) {
+  .progress-form-actions,
+  .progress-terminal-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .progress-save-actions {
+    justify-content: flex-end;
+  }
+}

@@ -110,9 +110,7 @@ export default function CustomerDrawer({
   const queryClient = useQueryClient();
   const [contextPreview, setContextPreview] = useState<string | null>(null);
   const [copyState, setCopyState] = useState("复制");
-  const [lifecycleTarget, setLifecycleTarget] = useState<
-    "cancel" | "complete" | null
-  >(null);
+  const [lifecycleTarget, setLifecycleTarget] = useState<"cancel" | null>(null);
   const query = useQuery({
     queryKey: ["customer", customerId],
     queryFn: () => api.customer(customerId),
@@ -141,17 +139,8 @@ export default function CustomerDrawer({
   });
 
   const lifecycleMutation = useMutation({
-    mutationFn: async ({
-      workItemId,
-      mode,
-    }: {
-      workItemId: number;
-      mode: "cancel" | "complete";
-    }) => {
-      return mode === "cancel"
-        ? api.cancelWork(workItemId)
-        : api.completeWork(workItemId);
-    },
+    mutationFn: ({ workItemId }: { workItemId: number; mode: "cancel" }) =>
+      api.cancelWork(workItemId),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["workbench"] }),
@@ -325,13 +314,6 @@ export default function CustomerDrawer({
                             onClick={() => setLifecycleTarget("cancel")}
                           >
                             取消跟进
-                          </button>
-                          <button
-                            className="button secondary compact"
-                            disabled={lifecycleMutation.isPending}
-                            onClick={() => setLifecycleTarget("complete")}
-                          >
-                            结束跟进
                           </button>
                         </>
                       )}
