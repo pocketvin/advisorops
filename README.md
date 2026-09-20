@@ -1,270 +1,280 @@
-# 证券客户经营工作台（工作名）
+# AdvisorOps
 
-面向证券客户经理日常存量客户经营的轻量 Web 产品原型。
+> 面向证券客户经理的可解释客户经营工作台原型。
+>
+> Explainable client-operations workbench for securities relationship managers.
 
-当前状态：**V1 可演示 / 可本地运行**。
+**Version:** 0.6.0 · **Status:** local demo / portfolio prototype
 
-它不是完整 CRM，也不虚构已经接入中信证券或其他券商内部系统。项目全部使用固定模拟客户数据，重点证明：
+AdvisorOps 解决的不是“再做一套完整 CRM”，而是 CRM 之上的日常经营问题：客户信息散落在电话、企业微信、外部系统和客户经理笔记里，客户经理需要知道 **今天手上要做什么、下一位值得联系谁、上次聊到哪里、下一步是什么**。
 
-- 能把零散客户信息沉淀成连续经营上下文；
-- 能区分“我手上正在做什么”和“下一位值得联系谁”；
-- 能把客户经理自然语言沟通记录变成可确认的结构化经营状态；
-- 能让状态、下一步、下一次联系时间和推荐队列形成闭环；
-- 能完整追溯原始记录、结构化结果和字段变化。
+项目使用固定模拟数据，不连接中信证券或任何真实券商内部系统。
 
-## 产品结构
+## Why AdvisorOps
+
+核心闭环：
+
+~~~text
+零散客户信息
+      ↓
+完整 Activity
+      ↓
+Current Snapshot
+      ↓
+Discovery Engine
+      ↓
+发现区 → 开始跟进 → WorkItem → 工作区
+                           ↓
+                     新一轮沟通
+                           ↓
+                        Activity
+                           └────────→ 回流
+~~~
+
+项目坚持三个原则：
+
+- **AI 负责理解**：把自然语言、聊天截图和历史记录整理成候选结构化信息；
+- **规则负责约束**：Priority、到期/逾期、冷静期和重复触达抑制保持确定性；
+- **人负责决策**：解释性状态变化默认由客户经理确认后才落库。
+
+## Product
 
 ### 1. 今日工作台
 
-**工作区**回答：
+工作台分成两个不同队列：
 
-> 我已经决定处理哪些客户，现在做到哪一步？
+- **工作区**：已经决定处理的客户，回答“我手上的事做到哪了？”
+- **发现区**：当前存在新行动理由的客户，回答“如果现在有空，下一个应该找谁？”
 
-包含：
+发现区不是给所有客户强行打分。系统先做 eligibility 判断，再对候选客户使用可解释 Rule-based Priority。
 
-- 待我处理
-- 等待中
-- 今日已完成
+### 2. 对话式记录进展
 
-**发现区**回答：
+记录客户沟通默认只需要：
 
-> 如果现在有时间，下一位值得新发起动作的客户是谁？
+- 一段自然语言；
+- 可选聊天截图 / 资料图片；
+- 沟通渠道。
 
-发现区不是“所有客户强行打分”，而是：
+系统会先生成结果卡：摘要、客户反馈、阶段、意向、下一步和下次联系时间。详细字段默认折叠，只有识别不准确时才展开修改。
 
-```text
-全量客户
-→ 排除已在工作区 / 今日已完成 / 冷静期
-→ 判断是否存在 actionable reason
-→ 对候选客户做可解释 Rule-based Priority
-→ 形成建议跟进列表
-```
+图片支持 JPEG / PNG / WebP，确认保存后文件只落在本地 work/attachments/，Activity 保存附件元数据和哈希，附件不进入 Git。
 
-支持：
+### 3. 客户全景画像
 
-- 开始跟进
-- 稍后跟进（明天 / 3 天后 / 1 周后 / 自定义时间）
-- 人工置顶
-- 查看原因
-- 进入客户详情
+客户画像不仅包含资产和风险，还包含：
 
-Priority 只代表**今日经营工作顺序**，不代表成交概率、客户价值或投资建议。
+- 粗粒度居住区域、职业、行业；
+- 家庭阶段、家庭责任、未来重大安排；
+- 收入、负债、现金流与流动性偏好；
+- 投资经验、主要目标、期限和信息偏好；
+- 沟通渠道 / 时间偏好；
+- 兴趣、主要顾虑和建立信任的因素。
 
-### 2. 客户动态
+“决策偏慢”“重大事项会与家人商量”等软判断单独保存为 **待验证经营假设**，不作为事实，也不直接参与 Priority。
 
-用于处理分散来源的信息。
+### 4. 客户动态 / 多源信息
 
-V1 提供三个固定 Mock 数据源：
+V0.6 提供三个 Mock 数据源：CRM、企业微信、行为数据，演示：
 
-- Mock CRM
-- Mock 企业微信
-- Mock 行为数据
+- incremental cursor；
+- (source, source_event_id) 幂等；
+- 确定事实自动写 Activity；
+- 解释性变化生成 Change Proposal；
+- 人工确认后才更新 Customer Snapshot。
 
-支持：
+### 5. 批量客户管理
 
-- 主动“立即刷新”
-- incremental cursor
-- `(source, source_event_id)` 幂等
-- 各来源独立同步状态
-- 确定事实自动写 Activity
-- 企业微信文本调用 Kimi K3 生成 Change Proposal
-- AI 解释性变化必须人工确认后才修改 Customer Snapshot
+“全部客户”支持：
 
-电话、线下等无法自动获得的信息既可以从客户详情补录，也可以使用顶部全局“记录进展”：默认只需要一段自然语言，可附 JPEG / PNG / WebP 聊天截图或资料图片，系统结合文字与图片整理后以结果卡确认；详细字段只有在需要纠正时才展开。全局记录仍通过姓名 / 客户编号确定客户，不让模型猜客户身份。
+- CSV 批量导入；
+- 中文 / 英文字段别名归一化；
+- 枚举、日期和重复客户检查；
+- 导入前预览；
+- 仅导入有效行；
+- 当前筛选结果多选；
+- 批量删除客户及其关联 Activity / WorkItem / Proposal；
+- 删除后清理仅由这些客户引用的本地附件。
 
-### 图片与附件
+导入细节见 [docs/IMPORT-GUIDE.md](docs/IMPORT-GUIDE.md)。
 
-记录进展支持最多 4 张 JPEG / PNG / WebP 图片。较大图片会在浏览器端压缩后再参与智能理解；确认保存后，附件文件仅保存在项目本地 `work/attachments/`，Activity 保存附件元数据和访问地址，附件不会进入 Git。
+## Architecture
 
-客户详情的 Activity Timeline 会显示图片缩略图，便于后续复盘。
+~~~text
+React + TypeScript + TanStack Query
+                │
+                ▼
+             FastAPI
+                │
+        ┌───────┼────────┐
+        ▼       ▼        ▼
+  Priority   AIService  SyncService
+        │       │        │
+        └───────┼────────┘
+                ▼
+          WorkbenchService
+                │
+                ▼
+           Repository
+                │
+                ▼
+          SQLite + WAL
+~~~
 
-### 3. 客户档案
+关键后端模块：
 
-40 个固定模拟客户，不使用随机 Faker 生成。服务层级使用中信证券公开展示的 Gold / Platinum / Black Gold / Diamond / Black Diamond 名称进行模拟，但不虚构内部资产门槛或分层规则。
+| Module | Responsibility |
+| --- | --- |
+| main.py | HTTP / REST 入口 |
+| service.py | 业务流程编排 |
+| repository.py | SQLite 数据访问 |
+| priority.py | Discovery eligibility + Priority |
+| ai_service.py | 沟通抽取、摘要、Change Proposal |
+| sync_service.py | 外部事件增量同步与幂等 |
+| import_service.py | CSV 字段归一化、预览、校验 |
+| context_pack.py | 脱敏 AI 咨询上下文 |
+| attachments.py | 图片校验、保存和清理 |
 
-每个客户保留：
+## Data model
 
-- 年龄段 / 服务层级（模拟） / 风险等级
-- 粗粒度居住区域 / 职业 / 行业 / 家庭阶段
-- 收入负债区间 / 现金流特征 / 未来重要安排
-- 投资经验 / 主要目标 / 投资期限 / 信息偏好
-- 沟通渠道与时间偏好 / 兴趣 / 顾虑 / 信任因素
-- 待验证经营假设（与已确认事实分离）
-- 总资产区间 / 可投资资金区间 / 持仓摘要
-- 最近登录 / 最近交易
-- 近 30 日资产变化
-- 最近关注产品主题 / 最近咨询主题
-- Relationship Stage / Intent Level
-- 当前需求 / 当前障碍 / 当前进展
-- 下一步 / 下一次联系时间 / 冷静期
-- 完整 Activity Timeline
-- Field Change Audit
-- 当前 WorkItem
-- 待确认 AI Proposal
+AdvisorOps 不把所有东西塞进一张客户表：
 
-客户列表支持：
+~~~text
+Customer Snapshot  ─ 当前已确认认知
+Activity Event     ─ 完整历史事实
+WorkItem           ─ 客户经理当前执行工作
+Change Proposal    ─ AI / 外部信息提出、尚未确认的解释
+Field Change Audit ─ 字段为什么发生变化
+~~~
 
-- 搜索
-- 关系阶段筛选
-- 风险等级筛选
-- 当前意向筛选
-- 资产区间筛选
-- 当前经营优先级 / 最近联系 / 姓名排序
+Priority 是 derived data，不作为客户权威事实持久化。
 
-## AI：Kimi K3
+## Quick start
 
-项目原则：
+### Prerequisites
 
-> **AI 负责理解，规则负责约束，人负责决策。**
-
-本机开发环境复用已配置的 Kimi K3（OpenAI-compatible Chat Completions），不把 API Key 写进仓库。
-
-V1 已实现：
-
-- 沟通原话 → Kimi K3 结构化候选结果
-- 关系阶段 / 意向 / 需求 / 障碍 / 下一步 / 下次联系时间 Proposal
-- 客户 30 秒经营摘要
-- AI 结果预填后人工修改与确认
-- 外部企业微信消息 → pending Change Proposal
-- 脱敏 AI Context Pack 预览与复制
-
-AI 不直接修改：
-
-- 身份信息
-- 账户信息
-- 权威风险等级
-- 正式适当性信息
-- 真实资产/持仓事实
-
-AI 失败时，原始记录仍可手工保存，模型不是客户记录链路的单点故障。
-
-## 高频业务闭环
-
-### 明确拒绝
-
-记录“明确拒绝”后：
-
-- relationship_stage → rejected
-- intent → low
-- 自动进入 30 天触达冷静期
-- 清除人工置顶
-- 当天完成本次 WorkItem
-- 冷静期内不进入发现区
-- 冷静期结束后只形成“低打扰服务复核”，不会直接恢复成营销跟进
-
-### 再考虑 3 天
-
-记录“再考虑 3 天”后：
-
-- relationship_stage → considering
-- 保存 `next_contact_at`
-- 当天完成本次 WorkItem
-- 未到期不进入发现区
-- 到期后自动重新进入发现区
-- 逾期后提高跟进紧迫度
-
-V1 不依赖凌晨定时任务修改状态；Follow-up State 根据当前时间动态计算。
-
-### 新行为信号
-
-新的资产变化 / 产品关注等确定事实进入 Activity，并更新结构化行为字段。
-
-若当前没有 active WorkItem，系统可产生新的发现理由：
-
-> 先核实新信号背后的真实需求。
-
-不会直接生成具体金融产品推荐。
-
-## 技术栈
-
-- React
-- TypeScript
-- Vite
-- TanStack Query
-- Python
-- FastAPI
-- Python `sqlite3` + 薄 Repository
-- SQLite WAL
-- pytest
-
-V1 不引入 Redis、Celery、Kafka、向量数据库、微服务或自主 Agent。
-
-## 本地运行
+- Python 3.12 recommended
+- Node.js 22 recommended
+- uv
+- npm
 
 ### Backend
 
-```bash
-cd /Users/yu0/Workspace/10-Projects/Securities-Client-Workbench/backend
+~~~bash
+cd backend
+cp .env.example .env
 uv sync --frozen
 uv run uvicorn app.main:app --reload --port 8010
-```
+~~~
 
-AI 配置优先读取：
+不配置 AI 也能运行，记录链路会退化为人工确认模式。
 
-- `WORKBENCH_KIMI_API_KEY`
-- `WORKBENCH_KIMI_BASE_URL`
-- `WORKBENCH_KIMI_MODEL`
+如果需要启用结构化 AI：
 
-本机开发环境在这些变量未设置时，可复用相邻 Floweroll 项目已经配置的 Planner Kimi 环境；不会复制或打印 API Key。
+~~~env
+ADVISOROPS_AI_API_KEY=...
+ADVISOROPS_AI_BASE_URL=https://your-openai-compatible-endpoint/v1
+ADVISOROPS_AI_MODEL=your-model
+ADVISOROPS_AI_MAX_COMPLETION_TOKENS=4096
+~~~
 
 ### Frontend
 
-```bash
-cd /Users/yu0/Workspace/10-Projects/Securities-Client-Workbench/frontend
+~~~bash
+cd frontend
 npm ci
 npm run dev
-```
+~~~
 
-Vite 默认把 `/api` 代理到 `127.0.0.1:8010`。
+默认 Vite 会把 /api 和 /attachments 代理到 http://127.0.0.1:8010。
 
-## 验证
+## Bulk import
 
-本地工程门：
+推荐直接从页面下载模板。仓库也提供：
 
-```bash
+- [examples/customer-import-template.csv](examples/customer-import-template.csv)
+- [examples/customer-import-sample.csv](examples/customer-import-sample.csv)
+
+当前采用 **new-only import**：已有 customer_id 不会被覆盖；同名不同 ID 只提醒，不自动合并。
+
+## Testing
+
+Backend:
+
+~~~bash
 cd backend
+uv lock --check
+uv sync --frozen
+uv run python -m compileall -q app tests
 uv run pytest -q
+~~~
 
-cd ../frontend
+Frontend:
+
+~~~bash
+cd frontend
+npm ci
 npm run typecheck
 npm run build
-```
+npm audit --audit-level=high
+~~~
 
-当前 V1：
+GitHub Actions 会在 push / pull request 上执行后端测试和前端 typecheck/build。
 
-- 40 条后端领域 / 数据库 / 同步 / AI / 图片附件 / 全局记录 / 客户画像测试
-- FastAPI 真实 API 链路
-- Kimi K3 真实结构化调用
-- TypeScript typecheck
-- Vite production build
-- GitHub Actions backend/frontend CI
-- Dependabot 配置
+## Repository structure
 
-## Demo 工具
+~~~text
+advisorops/
+├── backend/
+│   ├── app/
+│   └── tests/
+├── frontend/
+│   └── src/
+├── docs/
+├── examples/
+├── .github/
+├── SECURITY.md
+└── README.md
+~~~
 
-顶部“演示工具”支持：
+## Documentation
 
-- 时间推进 +1 天
-- 时间推进 +3 天
-- 重置固定演示数据
+- [docs/PRODUCT-MODEL.md](docs/PRODUCT-MODEL.md) — 产品模型
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 当前技术架构
+- [docs/FLOWS.md](docs/FLOWS.md) — 端到端业务流程
+- [docs/DATA-MODEL.md](docs/DATA-MODEL.md) — 数据对象与状态约束
+- [docs/IMPORT-GUIDE.md](docs/IMPORT-GUIDE.md) — CSV 导入规范
+- [docs/EVOLUTION.md](docs/EVOLUTION.md) — 产品演进（Evo）
+- [docs/RESEARCH-NOTES.md](docs/RESEARCH-NOTES.md) — 外部调研依据
+- [CHANGELOG.md](CHANGELOG.md) — 版本变更
+- [CONTRIBUTING.md](CONTRIBUTING.md) — 贡献与本地验证约定
 
-用于现场演示“再考虑 → 未到期 → 到期回流”，无需真的等待三天。
+## Security & privacy
 
-## 数据与合规边界
+- 仓库只允许模拟客户数据；
+- .env、本地 SQLite、附件、Token 和日志不进入 Git；
+- Context Pack 默认移除直接身份标识；
+- 精确地址、身份证、证券账号、银行账号不属于公开 Demo 字段；
+- 真实券商生产化需要独立完成 IAM、权限、审计、数据保留、网络边界、模型网关和个人信息治理。
 
-- 全部客户均为模拟数据。
-- 不暗示已经接入任何券商真实 CRM、企业微信或电话系统。
-- Priority 不是投资建议或成交概率。
-- 具体产品/服务仍应遵循真实机构的权限和投资者适当性流程。
-- AI Context Pack 默认去除姓名、手机号、账号、身份证和精确住址；Demo 只保留城市/区域级位置。
-- 真实机构落地时，应接公司批准的数据源与 AI Gateway，而不是默认把真实客户资料复制到个人外部 AI。
+详见 [SECURITY.md](SECURITY.md)。
 
-## 文档
+## Non-goals
 
-- `docs/PRODUCT-MODEL.md`
-- `docs/ARCHITECTURE.md`
-- `docs/FLOWS.md`
-- `docs/DATA-MODEL.md`
-- `docs/DEMO-SCENARIOS.md`
-- `docs/RESEARCH-NOTES.md`
-- `docs/REPOSITORY-GUIDE.md`
+当前版本明确不做：
+
+- 完整 CRM 替代；
+- 真实券商内部系统集成；
+- 自动金融产品推荐；
+- 自动客户触达；
+- 黑盒成交概率预测；
+- RAG / 自主 Agent / 微服务；
+- 生产级多租户与权限系统。
+
+## Evolution
+
+项目从“单列表 Priority Demo”逐步演进到“工作区 / 发现区 + Activity + WorkItem + Change Proposal + 多源同步 + 图片记录 + 批量管理”。完整决策历史见 [docs/EVOLUTION.md](docs/EVOLUTION.md)。
+
+## License
+
+当前仓库尚未授予开源复用许可证。公开 GitHub 用于作品集、学习和代码评审；如后续需要开放复用，再单独选择并加入许可证。

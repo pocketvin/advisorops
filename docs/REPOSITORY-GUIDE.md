@@ -6,16 +6,20 @@
 - 默认分支：main
 - 远端仓库：暂不创建
 - push：未授权，不执行
-- 项目名：仍为工作名，因此不提前绑定 GitHub repo 名称
+- 项目名：AdvisorOps
+- 推荐 GitHub repo：`advisorops`
 
-## 为什么现在不直接创建 GitHub 仓库
+## GitHub 发布状态
 
-还有两个产品问题未冻结：
+项目名已经冻结为 **AdvisorOps**。当前仍不自动创建 remote / push，因为远端创建和公开发布需要用户明确执行。
 
-1. 最终项目名
-2. 未来仓库是否公开
+本地发布前目标：
 
-因此当前先保证本地仓库结构、历史和忽略规则干净。产品名冻结后再创建 remote，避免无意义重命名。
+- `main` clean tree；
+- README / Security / Import Guide / Evolution 完整；
+- CI 与 lock file 可重复；
+- 仓库无真实客户数据、凭证、本地数据库或附件；
+- package / API 元数据统一为 AdvisorOps v0.6.0。
 
 ## Commit 约定
 
@@ -77,6 +81,7 @@ GitHub CI 应使用 lock file 做可重复安装。
 
 ### backend
 
+- uv lock --check
 - uv sync --frozen
 - compileall
 - pytest
@@ -86,8 +91,9 @@ GitHub CI 应使用 lock file 做可重复安装。
 - npm ci
 - typecheck
 - production build
+- npm audit --audit-level=high
 
-CI 不依赖真实 Kimi Key；模型相关测试使用 Fake Kimi，避免 CI 消费外部额度。
+CI 不依赖真实 AI Key；模型相关测试使用 Fake Client，避免 CI 消费外部额度。
 
 ## GitHub 安全准备
 
@@ -110,7 +116,7 @@ CI 不依赖真实 Kimi Key；模型相关测试使用 Fake Kimi，避免 CI 消
 - work/outputs 无临时敏感材料
 - .env 未被跟踪
 - Git 历史中没有误提交秘密
-- License 已明确选择
+- License 状态已明确：当前未授予开源复用许可证；若要开放复用，再单独选择许可证
 
 ## GitHub README 最终应包含
 

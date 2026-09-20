@@ -597,6 +597,94 @@ def customer_search(
     return result
 
 
+def delete_customers(
+    conn: sqlite3.Connection,
+    customer_ids: Iterable[str],
+) -> List[str]:
+    ids = list(
+        dict.fromkeys(
+            str(item).strip()
+            for item in customer_ids
+            if str(item).strip()
+        )
+    )
+    if not ids:
+        return []
+    placeholders = ",".join("?" for _ in ids)
+    rows = conn.execute(
+        f"SELECT customer_id FROM customers WHERE customer_id IN ({placeholders})",
+        ids,
+    ).fetchall()
+    existing = [str(row["customer_id"]) for row in rows]
+    if not existing:
+        return []
+    delete_placeholders = ",".join("?" for _ in existing)
+    conn.execute(
+        f"DELETE FROM customers WHERE customer_id IN ({delete_placeholders})",
+        existing,
+    )
+    return existing
+
+
+def attachment_urls_for_customers(
+    conn: sqlite3.Connection,
+    customer_ids: Iterable[str],
+) -> List[str]:
+    ids = list(
+        dict.fromkeys(
+            str(item).strip()
+            for item in customer_ids
+            if str(item).strip()
+        )
+    )
+    if not ids:
+        return []
+    placeholders = ",".join("?" for _ in ids)
+    rows = conn.execute(
+        f"""
+        SELECT metadata_json
+        FROM activity_events
+        WHERE customer_id IN ({placeholders})
+        """,
+        ids,
+    ).fetchall()
+    urls: List[str] = []
+    for row in rows:
+        try:
+            metadata = json.loads(row["metadata_json"] or "{}")
+        except json.JSONDecodeError:
+            continue
+        attachments = metadata.get("attachments")
+        if not isinstance(attachments, list):
+            continue
+        for item in attachments:
+            if not isinstance(item, dict):
+                continue
+            url = item.get("url")
+            if isinstance(url, str) and url.startswith("/attachments/"):
+                urls.append(url)
+    return list(dict.fromkeys(urls))
+
+
+def attachment_url_referenced(
+    conn: sqlite3.Connection,
+    url: str,
+) -> bool:
+    filename = url.rsplit("/", 1)[-1]
+    if not filename:
+        return False
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM activity_events
+        WHERE metadata_json LIKE ?
+        LIMIT 1
+        """,
+        (f"%{filename}%",),
+    ).fetchone()
+    return row is not None
+
+
 def latest_activities(
     conn: sqlite3.Connection,
     *,

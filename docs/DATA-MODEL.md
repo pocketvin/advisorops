@@ -323,3 +323,15 @@ follow_up_state 动态计算：
 - next_contact_at < now 且尚未处理 → overdue
 
 不依赖每天凌晨批量改状态。
+
+## 11. 批量导入与删除
+
+### Import Preview
+
+Import Preview 不持久化，是 CSV 进入正式数据库前的临时标准化视图：row_number、status、normalized Customer payload、errors、warnings。确认导入后，有效行进入 customers，并追加一条 source=import 的 ActivityEvent，保存来源行号。
+
+### 删除语义
+
+V0.6 的本地 Demo 支持 Customer 物理删除。依赖 SQLite foreign key cascade 清理 activity_events、work_items、field_change_audit、change_proposals 和相关 external_events。附件文件不在数据库中；删除客户后，仅清理不再被任何剩余 Activity 引用的 work/attachments 文件。
+
+真实生产系统不应直接沿用这一物理删除策略，而应按机构的数据保留、归档、审计和个人信息治理要求重新设计。

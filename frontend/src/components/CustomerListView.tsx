@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "../api";
+import BatchDeleteDialog from "./BatchDeleteDialog";
+import CustomerImportDialog from "./CustomerImportDialog";
 
 interface Props {
   onOpenCustomer: (customerId: string) => void;
@@ -38,6 +40,9 @@ export default function CustomerListView({ onOpenCustomer }: Props) {
   const [intent, setIntent] = useState("");
   const [assetBand, setAssetBand] = useState("");
   const [sortBy, setSortBy] = useState("priority");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [importOpen, setImportOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const query = useQuery({
     queryKey: ["customers", search, stage, risk, intent, assetBand, sortBy],
@@ -52,6 +57,64 @@ export default function CustomerListView({ onOpenCustomer }: Props) {
       }),
   });
 
+  const visibleIds = useMemo(
+    () => query.data?.map((item) => item.customer.customer_id) ?? [],
+    [query.data],
+  );
+
+  useEffect(() => {
+    const visible = new Set(visibleIds);
+    setSelected((current) => {
+      const next = new Set(
+        [...current].filter((customerId) => visible.has(customerId)),
+      );
+      if (
+        next.size === current.size &&
+        [...next].every((item) => current.has(item))
+      ) {
+        return current;
+      }
+      return next;
+    });
+  }, [visibleIds]);
+
+  const allVisibleSelected =
+    visibleIds.length > 0 &&
+    visibleIds.every((customerId) => selected.has(customerId));
+
+  const selectedNames = useMemo(() => {
+    const selectedSet = selected;
+    return (
+      query.data
+        ?.filter((item) => selectedSet.has(item.customer.customer_id))
+        .map((item) => item.customer.name) ?? []
+    );
+  }, [query.data, selected]);
+
+  function toggleCustomer(customerId: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(customerId)) {
+        next.delete(customerId);
+      } else {
+        next.add(customerId);
+      }
+      return next;
+    });
+  }
+
+  function toggleAllVisible() {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (allVisibleSelected) {
+        visibleIds.forEach((customerId) => next.delete(customerId));
+      } else {
+        visibleIds.forEach((customerId) => next.add(customerId));
+      }
+      return next;
+    });
+  }
+
   return (
     <section className="customer-list-page">
       <div className="section-title-row customer-page-heading">
@@ -59,10 +122,28 @@ export default function CustomerListView({ onOpenCustomer }: Props) {
           <p className="eyebrow">CUSTOMER BOOK</p>
           <h2>全部客户</h2>
           <p className="muted">
-            查看当前经营状态；是否进入发现区由“现在是否存在行动理由”决定。
+            查看、筛选和批量维护客户档案；导入数据会先标准化预览再确认。
           </p>
         </div>
-        <span className="section-count">{query.data?.length ?? 0} 位</span>
+        <div className="customer-admin-actions">
+          {selected.size > 0 && (
+            <span className="selected-count">已选 {selected.size} 位</span>
+          )}
+          <button
+            className="button secondary"
+            onClick={() => setImportOpen(true)}
+          >
+            批量导入 CSV
+          </button>
+          <button
+            className="button danger"
+            disabled={selected.size === 0}
+            onClick={() => setDeleteOpen(true)}
+          >
+            删除已选{selected.size ? " " + selected.size : ""}
+          </button>
+          <span className="section-count">{query.data?.length ?? 0} 位</span>
+        </div>
       </div>
 
       <div className="filter-bar filter-bar-six">
@@ -71,7 +152,7 @@ export default function CustomerListView({ onOpenCustomer }: Props) {
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="姓名 / 客户编号 / 当前需求"
+            placeholder="姓名 / 编号 / 需求 / 职业 / 地区 / 兴趣"
           />
         </label>
         <label>
@@ -90,9 +171,11 @@ export default function CustomerListView({ onOpenCustomer }: Props) {
           <span>风险等级</span>
           <select value={risk} onChange={(event) => setRisk(event.target.value)}>
             <option value="">全部</option>
+            <option value="C1">C1</option>
             <option value="C2">C2</option>
             <option value="C3">C3</option>
             <option value="C4">C4</option>
+            <option value="C5">C5</option>
           </select>
         </label>
         <label>
@@ -140,6 +223,14 @@ export default function CustomerListView({ onOpenCustomer }: Props) {
         <table className="customer-table">
           <thead>
             <tr>
+              <th className="select-column">
+                <input
+                  type="checkbox"
+                  aria-label="全选当前列表"
+                  checked={allVisibleSelected}
+                  onChange={toggleAllVisible}
+                />
+              </th>
               <th>客户</th>
               <th>状态</th>
               <th>当前需求</th>
@@ -152,8 +243,20 @@ export default function CustomerListView({ onOpenCustomer }: Props) {
           <tbody>
             {query.data?.map((item) => {
               const customer = item.customer;
+              const checked = selected.has(customer.customer_id);
               return (
-                <tr key={customer.customer_id}>
+                <tr
+                  key={customer.customer_id}
+                  className={checked ? "selected-row" : ""}
+                >
+                  <td className="select-column">
+                    <input
+                      type="checkbox"
+                      aria-label={"选择 " + customer.name}
+                      checked={checked}
+                      onChange={() => toggleCustomer(customer.customer_id)}
+                    />
+                  </td>
                   <td>
                     <div className="table-customer">
                       <strong>{customer.name}</strong>
@@ -214,6 +317,19 @@ export default function CustomerListView({ onOpenCustomer }: Props) {
           <div className="table-loading">没有符合当前筛选条件的客户。</div>
         )}
       </div>
+
+      {importOpen && (
+        <CustomerImportDialog onClose={() => setImportOpen(false)} />
+      )}
+
+      {deleteOpen && selected.size > 0 && (
+        <BatchDeleteDialog
+          customerIds={[...selected]}
+          customerNames={selectedNames}
+          onClose={() => setDeleteOpen(false)}
+          onDeleted={() => setSelected(new Set())}
+        />
+      )}
     </section>
   );
 }

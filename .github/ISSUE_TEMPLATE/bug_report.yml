@@ -1,0 +1,29 @@
+name: Bug report
+description: Report reproducible AdvisorOps behavior that is incorrect
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Use simulated/demo data only. Do not paste credentials or real customer data.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: 0.6.0 / commit hash
+  - type: textarea
+    id: validation
+    attributes:
+      label: Relevant logs or screenshots
+      description: Redact all sensitive information.

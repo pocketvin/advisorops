@@ -67,6 +67,15 @@ class DeferRequest(BaseModel):
         return self
 
 
+class CustomerImportRequest(BaseModel):
+    csv_text: str = Field(min_length=1, max_length=2_000_000)
+
+
+class BulkDeleteCustomersRequest(BaseModel):
+    customer_ids: List[str] = Field(min_length=1, max_length=500)
+    confirm: bool = False
+
+
 class InteractionRequest(BaseModel):
     raw_content: str = Field(default="", max_length=8000)
     structured_summary: str = Field(min_length=1, max_length=1500)

@@ -76,6 +76,25 @@ def image_data_urls(attachments: Iterable[Mapping[str, Any]]) -> List[str]:
     return [item["data_url"] for item in validate_attachment_payloads(attachments)]
 
 
+
+def remove_attachment_urls(urls: Iterable[str]) -> int:
+    directory = attachments_dir()
+    removed = 0
+    for url in urls:
+        filename = str(url).rsplit("/", 1)[-1]
+        if not filename:
+            continue
+        target = (directory / filename).resolve()
+        try:
+            target.relative_to(directory.resolve())
+        except ValueError:
+            continue
+        if target.is_file():
+            target.unlink()
+            removed += 1
+    return removed
+
+
 def save_attachments(
     attachments: Iterable[Mapping[str, Any]],
 ) -> List[Dict[str, Any]]:

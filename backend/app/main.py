@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -6,7 +6,9 @@ from .ai_client import KimiError, KimiUnavailableError
 from .attachments import attachments_dir
 from .schemas import (
     AIExtractRequest,
+    BulkDeleteCustomersRequest,
     ContextPackRequest,
+    CustomerImportRequest,
     DeferRequest,
     DemoTimeRequest,
     InteractionRequest,
@@ -23,8 +25,8 @@ from .service import (
 
 
 app = FastAPI(
-    title="证券客户经营工作台 API",
-    version="0.5.0",
+    title="AdvisorOps API",
+    version="0.6.0",
     description="仅使用模拟数据的客户经营工作流原型。",
 )
 
@@ -104,6 +106,59 @@ def customers(
         total_assets_band=total_assets_band,
         sort_by=sort_by,
     )
+
+
+@app.get("/api/customers/import-template")
+def customer_import_template():
+    return Response(
+        content=service.customer_import_template(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="advisorops-customer-import-template.csv"'
+            )
+        },
+    )
+
+
+@app.get("/api/customers/import-sample")
+def customer_import_sample():
+    return Response(
+        content=service.customer_import_sample(),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                'attachment; filename="advisorops-customer-import-sample.csv"'
+            )
+        },
+    )
+
+
+@app.post("/api/customers/import/preview")
+def customer_import_preview(payload: CustomerImportRequest):
+    try:
+        return service.preview_customer_import(payload.csv_text)
+    except Exception as exc:
+        raise _http_error(exc)
+
+
+@app.post("/api/customers/import/commit")
+def customer_import_commit(payload: CustomerImportRequest):
+    try:
+        return service.commit_customer_import(payload.csv_text)
+    except Exception as exc:
+        raise _http_error(exc)
+
+
+@app.post("/api/customers/bulk-delete")
+def customer_bulk_delete(payload: BulkDeleteCustomersRequest):
+    try:
+        return service.bulk_delete_customers(
+            payload.customer_ids,
+            confirm=payload.confirm,
+        )
+    except Exception as exc:
+        raise _http_error(exc)
 
 
 @app.get("/api/customers/{customer_id}")

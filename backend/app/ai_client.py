@@ -105,7 +105,7 @@ class KimiClient:
         max_completion_tokens: Optional[int] = None,
     ) -> KimiResult:
         if not self.configured:
-            raise KimiUnavailableError("Kimi K3 尚未配置")
+            raise KimiUnavailableError("AI 服务尚未配置")
 
         user_content: Any = user
         if images:

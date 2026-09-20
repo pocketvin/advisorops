@@ -123,7 +123,7 @@ V1 **不加入 APScheduler**。原因：求职 Demo 并不需要持续后台服�
 
 ## Phase 6：AI V1 — 完成
 
-模型：本机已有 **Kimi K3**。
+本地开发使用已配置的 **OpenAI-compatible structured-output 模型端点**；公开产品层不绑定或展示具体供应商。
 
 实现：
 
@@ -137,7 +137,7 @@ V1 **不加入 APScheduler**。原因：求职 Demo 并不需要持续后台服�
 
 没有做“AI 黑盒 Priority”。发现和排序仍由确定性规则控制。
 
-NBA 文案仍以规则为主，刻意没有每次都额外调用 Kimi，以降低延迟、费用和不稳定性。
+NBA 文案仍以规则为主，刻意没有在每次工作台刷新时额外调用模型，以降低延迟、费用和不稳定性。
 
 ## Phase 7：质量收敛 — 完成
 
@@ -200,3 +200,13 @@ NBA 文案仍以规则为主，刻意没有每次都额外调用 Kimi，以降�
 - 面试演示脚本和截图
 
 不应在没有真实需求前引入 Redis、Celery、Kafka、RAG、Agent、微服务或机器学习转化率模型。
+
+## Phase 9：AdvisorOps v0.6 / GitHub-ready — 完成
+
+- 正式命名 AdvisorOps。
+- CSV 批量导入：字段别名、值归一化、重复检查、预览确认、事务写入。
+- 批量删除：显式二次确认、数据库级联删除、无引用附件清理。
+- 增加标准 CSV 模板与示例。
+- 增加 README、CHANGELOG、CONTRIBUTING、SECURITY、Issue / PR 模板。
+- CI 增加 lockfile 检查与 npm audit。
+- AI 配置改为项目自己的通用环境变量，不再隐式依赖相邻本地项目。

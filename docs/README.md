@@ -1,6 +1,6 @@
 # 项目文档索引
 
-当前阶段：**V1 已实现，进入用户体验测试与迭代。**
+当前阶段：**AdvisorOps v0.6 已实现，进入 GitHub 发布前收敛与体验迭代。**
 
 ## 事实源
 
@@ -11,6 +11,8 @@
 - `IMPLEMENTATION-PLAN.md`：V1 已完成内容与后续方向。
 - `DEMO-SCENARIOS.md`：面试演示主线。
 - `RESEARCH-NOTES.md`：外部调研与技术选择依据。
+- `IMPORT-GUIDE.md`：CSV 批量导入与字段归一化规则。
+- `EVOLUTION.md`：项目演进（Evo）与关键架构决策。
 - `REPOSITORY-GUIDE.md`：Git / GitHub / CI / Secrets 约定。
 
 ## 当前工程原则
@@ -20,5 +22,5 @@
 3. Customer Snapshot 必须能追溯到完整 Activity。
 4. AI 负责理解和候选建议；确定性规则负责关键约束；客户经理保留最终确认。
 5. 权威事实与 AI 解释性字段严格区分。
-6. Kimi K3 失败时不阻塞手工记录。
+6. AI 服务失败时不阻塞手工记录；UI 不暴露模型/API 细节。
 7. 优先轻量成熟方案，不提前引入微服务、消息队列、Redis、Celery、向量数据库或复杂 Agent。

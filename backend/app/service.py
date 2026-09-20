@@ -6,8 +6,9 @@ from typing import Any, Callable, Dict, Mapping, Optional, Sequence
 from . import repository
 from .ai_client import KimiError
 from .ai_service import AIService, AI_MUTABLE_FIELDS
-from .attachments import image_data_urls, save_attachments
+from .attachments import image_data_urls, remove_attachment_urls, save_attachments
 from .context_pack import ContextPackService
+from .import_service import preview_csv_import, sample_csv, template_csv
 from .db import PathLike, connect, transaction
 from .priority import evaluate_discovery
 from .seed import ensure_seeded, reset_demo_data
@@ -67,8 +68,8 @@ class WorkbenchService:
 
     def meta(self) -> Dict[str, Any]:
         return {
-            "product_name": "客户经营工作台",
-            "working_name": True,
+            "product_name": "AdvisorOps",
+            "working_name": False,
             "positioning": "证券客户经理日常客户经营辅助原型",
             "data_notice": "全部客户均为模拟数据，不连接任何券商内部系统。",
             "ai": {"configured": self.ai.status()["configured"]},
@@ -189,6 +190,121 @@ class WorkbenchService:
                 reverse=True,
             )
         return result
+
+    def customer_import_template(self) -> str:
+        return template_csv()
+
+    def customer_import_sample(self) -> str:
+        return sample_csv()
+
+    def preview_customer_import(self, csv_text: str) -> Dict[str, Any]:
+        now_iso = to_iso(self._now()) or ""
+        with connect(self.db_path) as conn:
+            customers = repository.list_customers(conn)
+        return preview_csv_import(
+            csv_text,
+            existing_ids=[item["customer_id"] for item in customers],
+            existing_names=[item["name"] for item in customers],
+            now_iso=now_iso,
+        )
+
+    def commit_customer_import(self, csv_text: str) -> Dict[str, Any]:
+        preview = self.preview_customer_import(csv_text)
+        valid_rows = [
+            row for row in preview["rows"] if row["status"] == "valid"
+        ]
+        if not valid_rows:
+            raise ValueError("没有可导入的有效客户")
+
+        now_iso = to_iso(self._now()) or ""
+        imported_ids: list[str] = []
+        with transaction(self.db_path) as conn:
+            for row in valid_rows:
+                customer = row["normalized"]
+                repository.insert_customer(conn, customer)
+                repository.insert_activity(
+                    conn,
+                    {
+                        "customer_id": customer["customer_id"],
+                        "source": "import",
+                        "channel": "system",
+                        "activity_type": "profile",
+                        "occurred_at": now_iso,
+                        "raw_content": "",
+                        "structured_summary": "通过 CSV 批量导入客户档案。",
+                        "customer_feedback": "",
+                        "action_taken": "批量导入",
+                        "next_step": customer["next_step"],
+                        "next_contact_at": customer["next_contact_at"],
+                        "stage_after": customer["relationship_stage"],
+                        "intent_after": customer["intent_level"],
+                        "metadata": {
+                            "imported": True,
+                            "source_format": "csv",
+                            "source_row": row["row_number"],
+                        },
+                        "created_at": now_iso,
+                    },
+                )
+                imported_ids.append(customer["customer_id"])
+
+        return {
+            "imported_count": len(imported_ids),
+            "skipped_count": preview["summary"]["invalid"],
+            "imported_customer_ids": imported_ids,
+            "preview": preview,
+        }
+
+    def bulk_delete_customers(
+        self,
+        customer_ids: Sequence[str],
+        *,
+        confirm: bool,
+    ) -> Dict[str, Any]:
+        ids = list(
+            dict.fromkeys(
+                str(item).strip()
+                for item in customer_ids
+                if str(item).strip()
+            )
+        )
+        if not ids:
+            raise ValueError("请选择至少一个客户")
+        if not confirm:
+            raise ValueError("批量删除需要明确确认")
+
+        with transaction(self.db_path) as conn:
+            attachment_urls = repository.attachment_urls_for_customers(
+                conn,
+                ids,
+            )
+            deleted_ids = repository.delete_customers(conn, ids)
+
+        if not deleted_ids:
+            return {
+                "deleted_count": 0,
+                "deleted_customer_ids": [],
+                "missing_customer_ids": ids,
+                "removed_attachment_count": 0,
+            }
+
+        with connect(self.db_path) as conn:
+            removable_urls = [
+                url
+                for url in attachment_urls
+                if not repository.attachment_url_referenced(conn, url)
+            ]
+        removed_attachments = remove_attachment_urls(removable_urls)
+
+        deleted_set = set(deleted_ids)
+        return {
+            "deleted_count": len(deleted_ids),
+            "deleted_customer_ids": deleted_ids,
+            "missing_customer_ids": [
+                item for item in ids if item not in deleted_set
+            ],
+            "removed_attachment_count": removed_attachments,
+        }
 
     def customer_detail(self, customer_id: str) -> Dict[str, Any]:
         with connect(self.db_path) as conn:

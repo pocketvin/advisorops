@@ -73,7 +73,7 @@ export default function App() {
           <div className="brand-mark">经</div>
           <div>
             <p className="eyebrow">CLIENT OPERATIONS WORKBENCH</p>
-            <h1>客户经营工作台</h1>
+            <h1>AdvisorOps</h1>
           </div>
         </div>
 

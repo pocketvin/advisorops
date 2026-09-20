@@ -2,13 +2,13 @@
 
 ## Current phase
 
-V1 is implemented and is now in user experience testing / iteration.
+AdvisorOps v0.6 is implemented and is now in GitHub-readiness / user-experience iteration.
 
 The docs under `docs/` remain the architecture source of truth. Preserve the completed V1 boundaries: simulated customers, deterministic Discovery/Priority rules, complete Activity history, WorkItem state, human-confirmed AI Change Proposals, and no implication of real brokerage-system integration.
 
 ## Product goal
 
-Build a lightweight, explainable securities client-manager workbench prototype. It is not a brokerage CRM replacement and must never imply connection to CITIC Securities or any real brokerage internal system.
+Build AdvisorOps, a lightweight, explainable securities client-manager workbench prototype. It is not a brokerage CRM replacement and must never imply connection to CITIC Securities or any real brokerage internal system.
 
 ## Product model
 
@@ -31,6 +31,13 @@ Build a lightweight, explainable securities client-manager workbench prototype. 
 - Product/service-specific discussion remains gated by suitability and human confirmation.
 - Never auto-send financial recommendations or auto-make investment decisions.
 - Use simulated customer data only.
+
+## Import and destructive actions
+
+- CSV import must always preview normalized data before commit.
+- Existing customer IDs are not overwritten by default.
+- Batch deletion requires explicit confirmation and cleans cascaded local records/unused attachments.
+- Import/export examples must remain simulated and free of direct identifiers.
 
 ## AI principle
 

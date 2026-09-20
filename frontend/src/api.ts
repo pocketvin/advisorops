@@ -293,6 +293,39 @@ export interface ActivityFeed {
   };
 }
 
+export interface CustomerImportPreviewRow {
+  row_number: number;
+  status: "valid" | "invalid";
+  normalized: Customer & Record<string, unknown>;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface CustomerImportPreview {
+  summary: {
+    total: number;
+    valid: number;
+    invalid: number;
+    warnings: number;
+  };
+  ignored_columns: string[];
+  rows: CustomerImportPreviewRow[];
+}
+
+export interface CustomerImportResult {
+  imported_count: number;
+  skipped_count: number;
+  imported_customer_ids: string[];
+  preview: CustomerImportPreview;
+}
+
+export interface BulkDeleteResult {
+  deleted_count: number;
+  deleted_customer_ids: string[];
+  missing_customer_ids: string[];
+  removed_attachment_count: number;
+}
+
 export interface Meta {
   product_name: string;
   working_name: boolean;
@@ -362,6 +395,27 @@ export const api = {
 
   customer: (customerId: string) =>
     request<CustomerDetail>(`/api/customers/${customerId}`),
+
+  previewCustomerImport: (csvText: string) =>
+    request<CustomerImportPreview>("/api/customers/import/preview", {
+      method: "POST",
+      body: JSON.stringify({ csv_text: csvText }),
+    }),
+
+  commitCustomerImport: (csvText: string) =>
+    request<CustomerImportResult>("/api/customers/import/commit", {
+      method: "POST",
+      body: JSON.stringify({ csv_text: csvText }),
+    }),
+
+  bulkDeleteCustomers: (customerIds: string[]) =>
+    request<BulkDeleteResult>("/api/customers/bulk-delete", {
+      method: "POST",
+      body: JSON.stringify({
+        customer_ids: customerIds,
+        confirm: true,
+      }),
+    }),
 
   quickRecordPrepare: (payload: {
     raw_content: string;

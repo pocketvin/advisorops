@@ -1,7 +1,7 @@
 [project]
-name = "securities-client-workbench-backend"
-version = "0.1.0"
-description = "Rule-based securities client-manager workbench prototype"
+name = "advisorops-backend"
+version = "0.6.0"
+description = "AdvisorOps: explainable client-operations workbench for securities relationship managers"
 requires-python = ">=3.9"
 dependencies = [
   "fastapi>=0.115,<1",

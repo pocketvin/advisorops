@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Dict
 
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_SIBLING_FLOWEROLL_ENV = _PROJECT_ROOT.parent / "Floweroll" / ".env"
+_BACKEND_ROOT = Path(__file__).resolve().parents[1]
+_PROJECT_ENV = _BACKEND_ROOT / ".env"
 
 
 def _read_env_file(path: Path) -> Dict[str, str]:
@@ -40,33 +40,44 @@ class KimiSettings:
         return bool(self.api_key and self.base_url and self.model)
 
 
+def _value(
+    env_file: Dict[str, str],
+    primary: str,
+    legacy: str,
+) -> str:
+    return (
+        os.environ.get(primary, "").strip()
+        or env_file.get(primary, "").strip()
+        or os.environ.get(legacy, "").strip()
+        or env_file.get(legacy, "").strip()
+    )
+
+
 def load_kimi_settings() -> KimiSettings:
-    own_key = os.environ.get("WORKBENCH_KIMI_API_KEY", "").strip()
-    own_base = os.environ.get("WORKBENCH_KIMI_BASE_URL", "").strip()
-    own_model = os.environ.get("WORKBENCH_KIMI_MODEL", "").strip()
-    own_max = os.environ.get("WORKBENCH_KIMI_MAX_COMPLETION_TOKENS", "").strip()
+    env_file = _read_env_file(_PROJECT_ENV)
 
-    if own_key and own_base:
-        return KimiSettings(
-            api_key=own_key,
-            base_url=own_base.rstrip("/"),
-            model=own_model or "kimi-k3",
-            max_completion_tokens=int(own_max or "2048"),
-            source="workbench_env",
+    key = _value(env_file, "ADVISOROPS_AI_API_KEY", "WORKBENCH_KIMI_API_KEY")
+    base = _value(env_file, "ADVISOROPS_AI_BASE_URL", "WORKBENCH_KIMI_BASE_URL")
+    model = _value(env_file, "ADVISOROPS_AI_MODEL", "WORKBENCH_KIMI_MODEL")
+    max_tokens = _value(
+        env_file,
+        "ADVISOROPS_AI_MAX_COMPLETION_TOKENS",
+        "WORKBENCH_KIMI_MAX_COMPLETION_TOKENS",
+    )
+
+    source = "unconfigured"
+    if key and base and model:
+        source = (
+            "process_env"
+            if os.environ.get("ADVISOROPS_AI_API_KEY")
+            or os.environ.get("WORKBENCH_KIMI_API_KEY")
+            else "advisorops_env_file"
         )
-
-    # Local development fallback only. Reuse the already-configured sibling
-    # Floweroll planner without copying its secret into this repository.
-    floweroll = _read_env_file(_SIBLING_FLOWEROLL_ENV)
-    key = floweroll.get("FLOWEROLL_PLANNER_API_KEY", "").strip()
-    base = floweroll.get("FLOWEROLL_PLANNER_BASE_URL", "").strip()
-    model = floweroll.get("FLOWEROLL_PLANNER_MODEL", "").strip()
-    max_tokens = floweroll.get("FLOWEROLL_PLANNER_MAX_COMPLETION_TOKENS", "").strip()
 
     return KimiSettings(
         api_key=key,
         base_url=base.rstrip("/"),
-        model=model or "kimi-k3",
-        max_completion_tokens=min(int(max_tokens or "2048"), 4096),
-        source="floweroll_local_fallback" if key and base else "unconfigured",
+        model=model,
+        max_completion_tokens=min(int(max_tokens or "4096"), 8192),
+        source=source,
     )

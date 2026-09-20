@@ -67,18 +67,21 @@ V1 不引入 Redux / Zustand。只有当跨页面纯前端状态明显复杂以�
 
 不把业务规则直接塞在 router。
 
-建议目录：
+当前目录保持轻量单体，不为了分层本身拆子包：
 
 ```text
 backend/app/
-  api/
-  models/
-  services/
-  repositories/
-  connectors/
-  rules/
-  ai/
-  db/
+  main.py
+  service.py
+  repository.py
+  priority.py
+  ai_service.py
+  ai_client.py
+  sync_service.py
+  import_service.py
+  context_pack.py
+  attachments.py
+  db.py
 ```
 
 ### V1 数据访问
@@ -165,7 +168,7 @@ V1 模拟数据允许重建数据库，因此不急于引入 Alembic；开始保
 
 ### AIService
 
-- Kimi K3 interaction extraction
+- OpenAI-compatible structured interaction extraction
 - customer brief
 - signal candidate extraction
 - Change Proposal
